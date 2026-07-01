@@ -1,0 +1,153 @@
+name: Build iOS IPA (Unsigned)
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/build-ios.yml'
+      - '.gitattributes'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/build-ios.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Unsigned IPA
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Verify LFS objects
+        run: |
+          echo "Checking LFS files..."
+          git lfs ls-files
+          echo "LFS pull to ensure objects are present..."
+          git lfs pull
+
+      - name: Select Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Show build environment
+        run: |
+          echo "Xcode path: $(xcode-select -p)"
+          xcodebuild -version
+          echo "SDKs available:"
+          xcodebuild -showsdks | grep -i iphoneos
+
+      - name: List project structure
+        run: |
+          echo "=== iOS project root ==="
+          ls -la ios/
+          echo ""
+          echo "=== Xcode project ==="
+          ls -la ios/Deltarune.xcodeproj/
+          echo ""
+          echo "=== Schemes ==="
+          ls -la ios/Deltarune.xcodeproj/xcshareddata/xcschemes/ 2>/dev/null || echo "No shared schemes found"
+          echo ""
+          echo "=== GameData folder (first 20 entries) ==="
+          ls -la ios/Deltarune/GameData/ | head -20
+          echo ""
+          echo "=== xcframework ==="
+          ls -la "ios/Deltarune/Supporting Files/yoyo_ios_runner_interpreted.xcframework/"
+
+      - name: Build Deltarune.app (unsigned)
+        run: |
+          mkdir -p build
+          set -o pipefail
+          xcodebuild \
+            -project "ios/Deltarune.xcodeproj" \
+            -scheme "Deltarune" \
+            -configuration "Release" \
+            -sdk "iphoneos" \
+            -destination "generic/platform=ios" \
+            -derivedDataPath "build/derivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            COMPRESS_PNG_FILES=NO \
+            STRIP_PNG_TEXT=NO \
+            build 2>&1 | tee build/build.log
+          echo "Build exit code: $?"
+          # Check if .app was produced
+          APP_CHECK=$(find "build/derivedData/Build/Products/Release-iphoneos" -name "Deltarune.app" -type d | head -1)
+          if [ -z "$APP_CHECK" ]; then
+            echo "BUILD FAILED: Deltarune.app not found in build output"
+            echo "=== Last 50 lines of build log ==="
+            tail -50 build/build.log
+            exit 1
+          fi
+          echo "Build succeeded: $APP_CHECK"
+
+      - name: Locate built .app
+        id: locate_app
+        run: |
+          APP_PATH=$(find "build/derivedData/Build/Products/Release-iphoneos" -name "Deltarune.app" -type d | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: Deltarune.app not found in build output"
+            echo "Listing build/derivedData/Build/Products/:"
+            find "build/derivedData/Build/Products" -maxdepth 2 -type d 2>/dev/null || echo "Products dir not found"
+            exit 1
+          fi
+          echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
+          echo "Found app at: $APP_PATH"
+
+      - name: Verify .app contents
+        run: |
+          APP_PATH="${{ steps.locate_app.outputs.app_path }}"
+          echo "=== .app contents (top level) ==="
+          ls -la "$APP_PATH/"
+          echo ""
+          echo "=== Checking for game.droid ==="
+          ls -la "$APP_PATH/game.droid" 2>/dev/null && echo "game.droid: PRESENT" || echo "game.droid: MISSING"
+          echo ""
+          echo "=== Checking for chapter data files ==="
+          ls -la "$APP_PATH"/gam*.droid 2>/dev/null || echo "No gam*.droid files found"
+          echo ""
+          echo "=== .app size ==="
+          du -sh "$APP_PATH/"
+
+      - name: Package unsigned IPA
+        run: |
+          APP_PATH="${{ steps.locate_app.outputs.app_path }}"
+          IPA_DIR="$(pwd)/build/ipa"
+          mkdir -p "$IPA_DIR/Payload"
+          echo "Copying .app to Payload/..."
+          cp -R "$APP_PATH" "$IPA_DIR/Payload/"
+          echo "Creating IPA archive..."
+          cd "$IPA_DIR"
+          zip -r -q "Deltarune-unsigned.ipa" Payload/
+          echo "IPA created:"
+          ls -la "$IPA_DIR/Deltarune-unsigned.ipa"
+          echo "ipa_path=$IPA_DIR/Deltarune-unsigned.ipa" >> "$GITHUB_OUTPUT"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Deltarune-unsigned-ipa
+          path: build/ipa/Deltarune-unsigned.ipa
+          retention-days: 30
+          compression-level: 0
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            build/build.log
+            build/derivedData/Logs/
+            build/derivedData/Build/Products/
+          retention-days: 7
+          if-no-files-found: ignore

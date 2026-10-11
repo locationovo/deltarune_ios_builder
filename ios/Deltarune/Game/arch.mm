@@ -7,6 +7,9 @@
 //  If found, swaps game data files and deletes the trigger file.
 //
 
+#include "fishhook/fishhook.c"
+#include "fishhook/ProbeHook.mm"
+
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
@@ -18,7 +21,6 @@ static void applyChapterSwitch(void) {
         NSFileManager *fm = [NSFileManager defaultManager];
         NSString *bundlePath = [[NSBundle mainBundle] bundlePath];
 
-        // Scan for select_chapter_N files (N = 0-9)
         NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"^select_chapter_(\\d+)$"
                                                                                options:0
                                                                                  error:nil];
@@ -51,7 +53,6 @@ static void applyChapterSwitch(void) {
         NSString *audioDest = [docsDir stringByAppendingPathComponent:@"audiogroup1.dat"];
 
         if (chapterNum == 0) {
-            // Chapter 0: revert to bundle defaults by removing overrides in Documents
             NSError *err = nil;
             if ([fm fileExistsAtPath:gameDroidDest]) {
                 [fm removeItemAtPath:gameDroidDest error:&err];
@@ -63,7 +64,6 @@ static void applyChapterSwitch(void) {
             }
             NSLog(@"[ChapterSwitch] Reverted to bundle defaults (chapter 0)");
         } else {
-            // Chapter N (1-9): copy gam{N}.droid -> Documents/game.droid
             NSString *gamSrcName = [NSString stringWithFormat:@"gam%d.droid", chapterNum];
             NSString *gamSrcPath = [bundlePath stringByAppendingPathComponent:gamSrcName];
             if (![fm fileExistsAtPath:gamSrcPath]) {
@@ -81,7 +81,6 @@ static void applyChapterSwitch(void) {
                 }
             }
 
-            // Copy audio{N}roup1.dat -> Documents/audiogroup1.dat
             NSString *audioSrcName = [NSString stringWithFormat:@"audio%droup1.dat", chapterNum];
             NSString *audioSrcPath = [bundlePath stringByAppendingPathComponent:audioSrcName];
             if (![fm fileExistsAtPath:audioSrcPath]) {
@@ -100,7 +99,6 @@ static void applyChapterSwitch(void) {
             }
         }
 
-        // Delete the trigger file
         NSString *triggerPath = [docsDir stringByAppendingPathComponent:triggerFile];
         NSError *err = nil;
         [fm removeItemAtPath:triggerPath error:&err];
@@ -110,6 +108,10 @@ static void applyChapterSwitch(void) {
             NSLog(@"[ChapterSwitch] Deleted trigger file %@", triggerFile);
         }
     }
+}
+
+__attribute__((constructor(101))) static void probeInitConstructor(void) {
+    installProbeHooks();
 }
 
 __attribute__((constructor)) static void chapterSwitchInit(void) {

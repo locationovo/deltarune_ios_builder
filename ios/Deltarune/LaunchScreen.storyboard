@@ -15,14 +15,6 @@
                     <view key="view" contentMode="scaleAspectFit" id="Ze5-6b-2t3">
                         <rect key="frame" x="0.0" y="0.0" width="375" height="834"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
-                        <subviews>
-                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" image="launchscreen" id="j6d-Cd-54a">
-                                <rect key="frame" x="0.0" y="0.0" width="375" height="834"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMinX="YES" widthSizable="YES" flexibleMaxX="YES" flexibleMinY="YES" heightSizable="YES" flexibleMaxY="YES"/>
-								<variation key="heightClass=compact-widthClass=compact" image="launchscreen-landscape"/>
-                                <variation key="heightClass=compact-widthClass=regular" image="launchscreen-landscape"/>
-                            </imageView>
-                        </subviews>
                         <color key="backgroundColor" red="0" green="0" blue="0" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <viewLayoutGuide key="safeArea" id="6Tk-OE-BBY"/>
                     </view>
@@ -32,8 +24,4 @@
             <point key="canvasLocation" x="52.173913043478265" y="375"/>
         </scene>
     </scenes>
-    <resources>
-        <image name="launchscreen" width="1920" height="1080"/>
-        <image name="launchscreen-landscape" width="1024" height="1024"/>
-    </resources>
 </document>

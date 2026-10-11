@@ -10,8 +10,6 @@
 		0197A77A2786F9F800E38F62 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0197A7792786F9F800E38F62 /* Security.framework */; };
 		1F6F0F6F27568F1E00CA3848 /* yoyo_ios_runner_interpreted.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1F6F0F6E27568F1E00CA3848 /* yoyo_ios_runner_interpreted.xcframework */; };
 		1F97EAA623916C8A00238BC4 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 1F97EAA523916C8A00238BC4 /* LaunchScreen.storyboard */; };
-		1FF7A5D62396A56E00AA357F /* launchscreen.png in Resources */ = {isa = PBXBuildFile; fileRef = 1FF7A5D12396A56E00AA357F /* launchscreen.png */; };
-		1FF7A5DE2396AA2E00AA357F /* launchscreen-landscape.png in Resources */ = {isa = PBXBuildFile; fileRef = 1FF7A5DD2396AA2E00AA357F /* launchscreen-landscape.png */; };
 		7AD06AEB17A901A300B37894 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7AD06AEA17A901A300B37894 /* CoreGraphics.framework */; };
 		1F2C502527DA3791006091B2 /* CoreMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1F2C502427DA3791006091B2 /* CoreMedia.framework */; };
 		1F2C502727DA379B006091B2 /* CoreVideo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1F2C502627DA379B006091B2 /* CoreVideo.framework */; };
@@ -66,8 +64,6 @@
 		0197A7792786F9F800E38F62 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		1F6F0F6E27568F1E00CA3848 /* yoyo_ios_runner_interpreted.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = yoyo_ios_runner_interpreted.xcframework; path = "Deltarune/Supporting Files/yoyo_ios_runner_interpreted.xcframework"; sourceTree = "<group>"; };
 		1F97EAA523916C8A00238BC4 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
-		1FF7A5D12396A56E00AA357F /* launchscreen.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = launchscreen.png; path = Images.xcassets/launchscreen.imageset/launchscreen.png; sourceTree = "<group>"; };
-		1FF7A5DD2396AA2E00AA357F /* launchscreen-landscape.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = "launchscreen-landscape.png"; path = "Images.xcassets/launchscreen-landscape.imageset/launchscreen-landscape.png"; sourceTree = "<group>"; };
 		1FB114DA1D995B2600674D0D /* Deltarune.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Deltarune.entitlements; sourceTree = "<group>"; };
 		7AD06AE317A901A300B37894 /* Deltarune.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Deltarune.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7AD06AEA17A901A300B37894 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
@@ -191,8 +187,6 @@
 		7AD06C2D17A91AD000B37894 /* Supporting Files */ = {
 			isa = PBXGroup;
 			children = (
-				1FF7A5DD2396AA2E00AA357F /* launchscreen-landscape.png */,
-				1FF7A5D12396A56E00AA357F /* launchscreen.png */,
 				7AD06C2417A918BB00B37894 /* MainWindow-iPhone.xib */,
 				7AD06C2517A918BB00B37894 /* MainWindow.xib */,
 				7AD06C2617A918BB00B37894 /* OverlayViewController.xib */,
@@ -323,8 +317,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				1F97EAA623916C8A00238BC4 /* LaunchScreen.storyboard in Resources */,
-				1FF7A5DE2396AA2E00AA357F /* launchscreen-landscape.png in Resources */,
-				1FF7A5D62396A56E00AA357F /* launchscreen.png in Resources */,
     			7AD06AF117A901A300B37894 /* InfoPlist.strings in Resources */,
 				7AD06C2817A918BB00B37894 /* MainWindow-iPhone.xib in Resources */,
 				7AD06C2917A918BB00B37894 /* MainWindow.xib in Resources */,
@@ -452,7 +444,7 @@
 					"-all_load",
 					"-fobjc-arc",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "cn.tobyfox.hnd.mubai.cgoat.genouka.deltarune";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.locationovo.DELTARUNE";
 				SDKROOT = iphoneos;
 				SYSTEM_HEADER_SEARCH_PATHS = Deltarune;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -488,7 +480,7 @@
 				HEADER_SEARCH_PATHS = .;
 				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
 				OTHER_CFLAGS = "-DNS_BLOCK_ASSERTIONS=1";
-				PRODUCT_BUNDLE_IDENTIFIER = "cn.tobyfox.hnd.mubai.cgoat.genouka.deltarune";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.locationovo.DELTARUNE";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				ONLY_ACTIVE_ARCH = NO;

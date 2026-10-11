@@ -6,12 +6,6 @@ on:
     paths:
       - 'ios/**'
       - '.github/workflows/build-ios.yml'
-      - '.gitattributes'
-  pull_request:
-    branches: [ main, master ]
-    paths:
-      - 'ios/**'
-      - '.github/workflows/build-ios.yml'
   workflow_dispatch:
 
 jobs:
@@ -25,41 +19,44 @@ jobs:
         with:
           lfs: true
 
-      - name: Verify LFS objects
+      - name: Download GameData from private release
+        env:
+          GH_TOKEN: ${{ secrets.DELTARUNE_DATA_TOKEN }}
         run: |
-          echo "Checking LFS files..."
-          git lfs ls-files
-          echo "LFS pull to ensure objects are present..."
-          git lfs pull
+          set -e
+          echo "Token length: ${#GH_TOKEN}"
+          ASSET_ID=$(curl -s -H "Authorization: token ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/locationovo/deltarune-data/releases/tags/v1" \
+            | jq -r '.assets[0].id')
+          echo "Asset ID: $ASSET_ID"
+          [ "$ASSET_ID" != "null" ] && [ -n "$ASSET_ID" ] || { echo "Failed to get asset ID"; exit 1; }
+          curl -fL -H "Authorization: token ${GH_TOKEN}" \
+            -H "Accept: application/octet-stream" \
+            -o /tmp/gamedata.tar.gz \
+            "https://api.github.com/repos/locationovo/deltarune-data/releases/assets/$ASSET_ID"
+          ls -la /tmp/gamedata.tar.gz
+          mkdir -p ios/Deltarune/GameData/games
+          tar -xzf /tmp/gamedata.tar.gz -C ios/Deltarune/GameData/games/
+          rm /tmp/gamedata.tar.gz
+          ls -la ios/Deltarune/GameData/games/
 
+#      - name: Verify game data
+#        run: |
+#          cd ios/Deltarune/GameData/games
+#          for f in game.ios gam1.droid gam2.droid gam3.droid \
+#                   gam4.droid gam5.droid audiogroup1.dat; do
+#            [ -f "$f" ] || { echo "MISSING: $f"; exit 1; }
+#            echo "OK: $f ($(du -h "$f" | cut -f1))"
+#          done
+#          test -d lang && echo "OK: lang/"
+#          test -d mus && echo "OK: mus/"
+#          test -d vid && echo "OK: vid/"
+#
       - name: Select Xcode version
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
-
-      - name: Show build environment
-        run: |
-          echo "Xcode path: $(xcode-select -p)"
-          xcodebuild -version
-          echo "SDKs available:"
-          xcodebuild -showsdks | grep -i iphoneos
-
-      - name: List project structure
-        run: |
-          echo "=== iOS project root ==="
-          ls -la ios/
-          echo ""
-          echo "=== Xcode project ==="
-          ls -la ios/Deltarune.xcodeproj/
-          echo ""
-          echo "=== Schemes ==="
-          ls -la ios/Deltarune.xcodeproj/xcshareddata/xcschemes/ 2>/dev/null || echo "No shared schemes found"
-          echo ""
-          echo "=== GameData folder (first 20 entries) ==="
-          ls -la ios/Deltarune/GameData/ | head -20
-          echo ""
-          echo "=== xcframework ==="
-          ls -la "ios/Deltarune/Supporting Files/yoyo_ios_runner_interpreted.xcframework/"
 
       - name: Build Deltarune.app (unsigned)
         run: |
@@ -79,58 +76,38 @@ jobs:
             COMPRESS_PNG_FILES=NO \
             STRIP_PNG_TEXT=NO \
             build 2>&1 | tee build/build.log
-          echo "Build exit code: $?"
-          # Check if .app was produced
-          APP_CHECK=$(find "build/derivedData/Build/Products/Release-iphoneos" -name "Deltarune.app" -type d | head -1)
-          if [ -z "$APP_CHECK" ]; then
-            echo "BUILD FAILED: Deltarune.app not found in build output"
-            echo "=== Last 50 lines of build log ==="
-            tail -50 build/build.log
-            exit 1
-          fi
-          echo "Build succeeded: $APP_CHECK"
+          APP=$(find build/derivedData/Build/Products/Release-iphoneos -name "Deltarune.app" -type d | head -1)
+          [ -n "$APP" ] || { echo "BUILD FAILED"; tail -50 build/build.log; exit 1; }
 
       - name: Locate built .app
         id: locate_app
         run: |
-          APP_PATH=$(find "build/derivedData/Build/Products/Release-iphoneos" -name "Deltarune.app" -type d | head -1)
-          if [ -z "$APP_PATH" ]; then
-            echo "ERROR: Deltarune.app not found in build output"
-            echo "Listing build/derivedData/Build/Products/:"
-            find "build/derivedData/Build/Products" -maxdepth 2 -type d 2>/dev/null || echo "Products dir not found"
-            exit 1
-          fi
-          echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
-          echo "Found app at: $APP_PATH"
+          APP=$(find build/derivedData/Build/Products/Release-iphoneos -name "Deltarune.app" -type d | head -1)
+          echo "app_path=$APP" >> "$GITHUB_OUTPUT"
 
       - name: Verify .app contents
         run: |
-          APP_PATH="${{ steps.locate_app.outputs.app_path }}"
-          echo "=== .app contents (top level) ==="
-          ls -la "$APP_PATH/"
-          echo ""
-          echo "=== Checking for game.droid ==="
-          ls -la "$APP_PATH/game.droid" 2>/dev/null && echo "game.droid: PRESENT" || echo "game.droid: MISSING"
-          echo ""
-          echo "=== Checking for chapter data files ==="
-          ls -la "$APP_PATH"/gam*.droid 2>/dev/null || echo "No gam*.droid files found"
-          echo ""
-          echo "=== .app size ==="
-          du -sh "$APP_PATH/"
+          APP="${{ steps.locate_app.outputs.app_path }}"
+          ls -la "$APP/" | head -30
+          echo "=== .app/games ==="
+          ls -la "$APP/games/" | head -30
+          for f in game.ios gam1.droid gam5.droid audiogroup1.dat; do
+            [ -f "$APP/games/$f" ] && echo "OK: games/$f" || echo "MISSING: games/$f"
+          done
+          du -sh "$APP/"
 
       - name: Package unsigned IPA
         run: |
-          APP_PATH="${{ steps.locate_app.outputs.app_path }}"
+          APP="${{ steps.locate_app.outputs.app_path }}"
           IPA_DIR="$(pwd)/build/ipa"
+          rm -rf "$IPA_DIR"
           mkdir -p "$IPA_DIR/Payload"
-          echo "Copying .app to Payload/..."
-          cp -R "$APP_PATH" "$IPA_DIR/Payload/"
-          echo "Creating IPA archive..."
+          cp -R "$APP" "$IPA_DIR/Payload/"
+          rm -rf "$IPA_DIR/Payload/Deltarune.app/PlugIns"
+          rm -rf "$IPA_DIR/Payload/Deltarune.app/Frameworks/Deltarune Tests.xctest"
           cd "$IPA_DIR"
           zip -r -q "Deltarune-unsigned.ipa" Payload/
-          echo "IPA created:"
           ls -la "$IPA_DIR/Deltarune-unsigned.ipa"
-          echo "ipa_path=$IPA_DIR/Deltarune-unsigned.ipa" >> "$GITHUB_OUTPUT"
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
@@ -140,7 +117,7 @@ jobs:
           retention-days: 30
           compression-level: 0
 
-      - name: Upload build logs on failure
+      - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -148,6 +125,5 @@ jobs:
           path: |
             build/build.log
             build/derivedData/Logs/
-            build/derivedData/Build/Products/
           retention-days: 7
           if-no-files-found: ignore

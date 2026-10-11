@@ -20,20 +20,6 @@
                ReferencedContainer = "container:Deltarune.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
-         <BuildActionEntry
-            buildForTesting = "YES"
-            buildForRunning = "YES"
-            buildForProfiling = "NO"
-            buildForArchiving = "NO"
-            buildForAnalyzing = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "7AE2FA521A28EA0F0087D33F"
-               BuildableName = "Deltarune Tests.xctest"
-               BlueprintName = "Deltarune Tests"
-               ReferencedContainer = "container:Deltarune.xcodeproj">
-            </BuildableReference>
-         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -42,16 +28,6 @@
       shouldUseLaunchSchemeArgsEnv = "YES"
       buildConfiguration = "Debug">
       <Testables>
-         <TestableReference
-            skipped = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "7AE2FA521A28EA0F0087D33F"
-               BuildableName = "Deltarune Tests.xctest"
-               BlueprintName = "Deltarune Tests"
-               ReferencedContainer = "container:Deltarune.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
       </Testables>
       <MacroExpansion>
          <BuildableReference
@@ -71,7 +47,7 @@
       buildConfiguration = "Debug"
       ignoresPersistentStateOnLaunch = "NO"
       debugDocumentVersioning = "YES"
-	  enableGPUValidationMode = "1"
+      enableGPUValidationMode = "1"
       allowLocationSimulation = "YES">
       <BuildableProductRunnable>
          <BuildableReference

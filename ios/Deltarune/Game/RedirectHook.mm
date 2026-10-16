@@ -10,12 +10,12 @@ void setTargetChapter(int chapter) {
     g_target_chapter = chapter;
 }
 
-static FILE* (*orig_fopen)(const char*, const char*);
+static FILE* (*redir_orig_fopen)(const char*, const char*);
 
-static FILE* my_fopen(const char* path, const char* mode) {
-    if (!path || !mode || mode[0] != 'r') return orig_fopen(path, mode);
-    if (g_target_chapter <= 0) return orig_fopen(path, mode);
-    if (!strstr(path, "/games/")) return orig_fopen(path, mode);
+static FILE* redir_my_fopen(const char* path, const char* mode) {
+    if (!path || !mode || mode[0] != 'r') return redir_orig_fopen(path, mode);
+    if (g_target_chapter <= 0) return redir_orig_fopen(path, mode);
+    if (!strstr(path, "/games/")) return redir_orig_fopen(path, mode);
 
     static __thread char buffer[PATH_MAX];
 
@@ -26,7 +26,7 @@ static FILE* my_fopen(const char* path, const char* mode) {
             memcpy(buffer, path, prefix);
             snprintf(buffer + prefix, sizeof(buffer) - prefix,
                      "/games/gam%d.droid", g_target_chapter);
-            return orig_fopen(buffer, mode);
+            return redir_orig_fopen(buffer, mode);
         }
     }
 
@@ -37,16 +37,16 @@ static FILE* my_fopen(const char* path, const char* mode) {
             memcpy(buffer, path, prefix);
             snprintf(buffer + prefix, sizeof(buffer) - prefix,
                      "/games/audio%droup1.dat", g_target_chapter);
-            return orig_fopen(buffer, mode);
+            return redir_orig_fopen(buffer, mode);
         }
     }
 
-    return orig_fopen(path, mode);
+    return redir_orig_fopen(path, mode);
 }
 
 __attribute__((constructor(103))) static void installRedirect(void) {
     struct rebinding rb[] = {
-        {"fopen", (void*)my_fopen, (void**)&orig_fopen},
+        {"fopen", (void*)redir_my_fopen, (void**)&redir_orig_fopen},
     };
     rebind_symbols(rb, 1);
 }

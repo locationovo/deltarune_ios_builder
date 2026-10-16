@@ -1,4 +1,4 @@
-#import "fishhook.h"
+#import "fishhook/fishhook.h"
 #import <Foundation/Foundation.h>
 #include <string.h>
 #include <limits.h>

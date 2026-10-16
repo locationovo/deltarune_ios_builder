@@ -31,7 +31,7 @@ breakIdx += 6;
 string insert =
     "\n            case os_ios:\n" +
     "                {\n" +
-    "                    var _f = file_text_open_write(\"chapter\" + chapstring + \".temp\");\n" +
+    "                    var _f = file_text_open_write(\"select_chapter_\" + chapstring);\n" +
     "                    file_text_close(_f);\n" +
     "                    game_end();\n" +
     "                    return;\n" +

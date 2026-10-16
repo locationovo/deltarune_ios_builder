@@ -20,6 +20,22 @@ static void (*orig_exit_fn)(int);
 static void (*orig__exit_fn)(int);
 static int g_exiting = 0;
 
+static void writeArchLog(const char *fmt, ...) {
+    @autoreleasepool {
+        NSArray *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+        if (docs.count == 0) return;
+        NSString *path = [docs[0] stringByAppendingPathComponent:@"arch.log"];
+        FILE *f = fopen([path UTF8String], "a");
+        if (!f) return;
+        va_list ap;
+        va_start(ap, fmt);
+        vfprintf(f, fmt, ap);
+        va_end(ap);
+        fprintf(f, "\n");
+        fclose(f);
+    }
+}
+
 static void applyChapterSwitch(void) {
     @autoreleasepool {
         NSArray *docPaths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
@@ -54,8 +70,10 @@ static void applyChapterSwitch(void) {
         if (triggerFile == nil) return;
 
         NSLog(@"[ChapterSwitch] Detected %@, target chapter %d", triggerFile, chapterNum);
+        writeArchLog("[applyChapterSwitch] found %s chapter %d", [triggerFile UTF8String], chapterNum);
 
         setTargetChapter(chapterNum);
+        writeArchLog("[applyChapterSwitch] setTargetChapter(%d)", chapterNum);
 
         NSString *triggerPath = [docsDir stringByAppendingPathComponent:triggerFile];
         NSError *err = nil;
@@ -82,7 +100,9 @@ static void handleExitBefore(void) {
             if ([name hasPrefix:@"select_chapter_"]) { pending = YES; break; }
         }
 
+        writeArchLog("[handleExitBefore] pending=%d", pending);
         if (pending) {
+            writeArchLog("[handleExitBefore] openURL:dios://");
             dispatch_async(dispatch_get_main_queue(), ^{
                 [[UIApplication sharedApplication]
                     openURL:[NSURL URLWithString:@"dios://"]
@@ -120,3 +140,14 @@ __attribute__((constructor(101))) static void probeInitConstructor(void) {
 void minimalfunction()
 {
 }
+
+@interface iPad_RunnerAppDelegate (URLScheme)
+@end
+@implementation iPad_RunnerAppDelegate (URLScheme)
+- (BOOL)application:(UIApplication *)app
+            openURL:(NSURL *)url
+            options:(NSDictionary<UIApplicationOpenURLOptionsKey,id> *)options {
+    writeArchLog("[openURL] %s", [[url absoluteString] UTF8String]);
+    return YES;
+}
+@end

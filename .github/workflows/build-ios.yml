@@ -29,6 +29,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/locationovo/deltarune-data/releases/tags/v1" \
             | jq -r '.assets[0].id')
+          echo "ASSET_ID=$ASSET_ID"
           [ "$ASSET_ID" != "null" ] && [ -n "$ASSET_ID" ] || { echo "asset not found"; exit 1; }
 
           curl -fL -H "Authorization: token ${GH_TOKEN}" \
@@ -36,10 +37,23 @@ jobs:
             -o /tmp/gamedata.tar.gz \
             "https://api.github.com/repos/locationovo/deltarune-data/releases/assets/$ASSET_ID"
 
+          echo "=== tar file info ==="
+          ls -la /tmp/gamedata.tar.gz
+          file /tmp/gamedata.tar.gz
+          echo "=== tar first 10 entries ==="
+          tar -tzf /tmp/gamedata.tar.gz | head -10
+
+          rm -rf ios/Deltarune/GameData
           mkdir -p ios/Deltarune/GameData/games
           tar -xzf /tmp/gamedata.tar.gz -C ios/Deltarune/GameData/games/
-          rm /tmp/gamedata.tar.gz
+
+          echo "=== extracted ==="
           ls -la ios/Deltarune/GameData/games/ | head -30
+          COUNT=$(ls ios/Deltarune/GameData/games/ | wc -l)
+          echo "file count: $COUNT"
+          [ "$COUNT" -gt 0 ] || { echo "extract produced no files"; exit 1; }
+
+          rm /tmp/gamedata.tar.gz
 
       - name: Setup dotnet
         uses: actions/setup-dotnet@v4

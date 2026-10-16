@@ -20,6 +20,7 @@
 static void (*orig_exit_fn)(int);
 static void (*orig__exit_fn)(int);
 static int g_exiting = 0;
+static dispatch_source_t g_pollTimer = nil;
 
 static void writeArchLog(const char *fmt, ...) {
     @autoreleasepool {
@@ -43,6 +44,14 @@ static void applyChapterSwitch(void) {
         if (docPaths.count == 0) return;
         NSString *docsDir = docPaths[0];
         NSFileManager *fm = [NSFileManager defaultManager];
+
+        NSString *launcherTemp = [docsDir stringByAppendingPathComponent:@"launcher.temp"];
+        if ([fm fileExistsAtPath:launcherTemp]) {
+            setTargetChapter(0);
+            [fm removeItemAtPath:launcherTemp error:nil];
+            writeArchLog("[applyChapterSwitch] launcher.temp consumed, target=0");
+            return;
+        }
 
         NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"^select_chapter_(\\d+)$"
                                                                                options:0
@@ -68,20 +77,16 @@ static void applyChapterSwitch(void) {
             }
         }
 
-        if (triggerFile == nil) return;
-
-        NSLog(@"[ChapterSwitch] Detected %@, target chapter %d", triggerFile, chapterNum);
-        writeArchLog("[applyChapterSwitch] found %s chapter %d", [triggerFile UTF8String], chapterNum);
+        if (triggerFile == nil) {
+            writeArchLog("[applyChapterSwitch] no trigger");
+            return;
+        }
 
         setTargetChapter(chapterNum);
-        writeArchLog("[applyChapterSwitch] setTargetChapter(%d)", chapterNum);
+        writeArchLog("[applyChapterSwitch] found %s chapter %d", [triggerFile UTF8String], chapterNum);
 
         NSString *triggerPath = [docsDir stringByAppendingPathComponent:triggerFile];
-        NSError *err = nil;
-        [fm removeItemAtPath:triggerPath error:&err];
-        if (err) {
-            NSLog(@"[ChapterSwitch] Failed to delete trigger file: %@", err);
-        }
+        [fm removeItemAtPath:triggerPath error:nil];
     }
 }
 
@@ -99,6 +104,10 @@ static void handleExitBefore(void) {
         BOOL pending = NO;
         for (NSString *name in docFiles) {
             if ([name hasPrefix:@"select_chapter_"]) { pending = YES; break; }
+        }
+        if (!pending && [fm fileExistsAtPath:
+            [docsDir stringByAppendingPathComponent:@"launcher.temp"]]) {
+            pending = YES;
         }
 
         writeArchLog("[handleExitBefore] pending=%d", pending);
@@ -125,21 +134,55 @@ static void my__exit(int code) {
     orig__exit_fn(code);
 }
 
-__attribute__((constructor(100))) static void chapterSwitchInit(void) {
+static void startPoller(void) {
+    if (g_pollTimer) return;
+    dispatch_queue_t q = dispatch_get_global_queue(QOS_CLASS_UTILITY, 0);
+    g_pollTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, q);
+    dispatch_source_set_timer(g_pollTimer,
+                              dispatch_time(DISPATCH_TIME_NOW, 0),
+                              300 * NSEC_PER_MSEC,
+                              100 * NSEC_PER_MSEC);
+    dispatch_source_set_event_handler(g_pollTimer, ^{
+        @autoreleasepool {
+            if (g_exiting) return;
+            NSArray *docs = NSSearchPathForDirectoriesInDomains(
+                NSDocumentDirectory, NSUserDomainMask, YES);
+            if (docs.count == 0) return;
+            NSString *docDir = docs[0];
+            NSFileManager *fm = [NSFileManager defaultManager];
+
+            BOOL pending = NO;
+            for (int i = 1; i <= 5; i++) {
+                NSString *t = [docDir stringByAppendingPathComponent:
+                               [NSString stringWithFormat:@"select_chapter_%d", i]];
+                if ([fm fileExistsAtPath:t]) { pending = YES; break; }
+            }
+            if (!pending && [fm fileExistsAtPath:
+                [docDir stringByAppendingPathComponent:@"launcher.temp"]]) {
+                pending = YES;
+            }
+
+            if (pending) {
+                writeArchLog("[poller] trigger, exit(0)");
+                exit(0);
+            }
+        }
+    });
+    dispatch_resume(g_pollTimer);
+}
+
+__attribute__((constructor(100))) static void chapterInit(void) {
     applyChapterSwitch();
     struct rebinding rb[] = {
         {"exit",  (void*)my_exit,  (void**)&orig_exit_fn},
         {"_exit", (void*)my__exit, (void**)&orig__exit_fn},
     };
     rebind_symbols(rb, 2);
+    startPoller();
 }
 
 __attribute__((constructor(101))) static void probeInitConstructor(void) {
     installProbeHooks();
-}
-
-void minimalfunction()
-{
 }
 
 static BOOL dios_openURL(id self, SEL _cmd, UIApplication *app, NSURL *url, NSDictionary *opts) {
@@ -150,7 +193,7 @@ static BOOL dios_openURL(id self, SEL _cmd, UIApplication *app, NSURL *url, NSDi
 __attribute__((constructor(104))) static void installURLHandler(void) {
     Class cls = NSClassFromString(@"iPad_RunnerAppDelegate");
     if (!cls) {
-        writeArchLog("[URLScheme] iPad_RunnerAppDelegate not found");
+        writeArchLog("[URLScheme] class not found");
         return;
     }
     SEL sel = @selector(application:openURL:options:);
@@ -158,6 +201,8 @@ __attribute__((constructor(104))) static void installURLHandler(void) {
         class_addMethod(cls, sel, (IMP)dios_openURL, "B@:@@@");
         writeArchLog("[URLScheme] openURL:options: added");
     } else {
-        writeArchLog("[URLScheme] openURL:options: already exists");
+        writeArchLog("[URLScheme] openURL:options: exists");
     }
 }
+
+void minimalfunction() {}

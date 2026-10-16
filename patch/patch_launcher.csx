@@ -39,6 +39,25 @@ string insert =
 
 gml = gml.Insert(breakIdx, insert);
 
+string quitNeedle = "quit = function()";
+int qIdx = gml.IndexOf(quitNeedle);
+if (qIdx >= 0) {
+    int qBodyStart = gml.IndexOf("{", qIdx);
+    if (qBodyStart >= 0) {
+        int qInsert = qBodyStart + 1;
+        string quitBranch =
+            "\n    if (os_type == os_ios)\n" +
+            "    {\n" +
+            "        var _f2 = file_text_open_write(\"launcher.temp\");\n" +
+            "        file_text_close(_f2);\n" +
+            "        game_end();\n" +
+            "        return;\n" +
+            "    }";
+        gml = gml.Insert(qInsert, quitBranch);
+        Console.WriteLine("quit patched");
+    }
+}
+
 var group = new CodeImportGroup(Data);
 group.QueueReplace(code, gml);
 group.Import();

@@ -1,4 +1,4 @@
-name: Build iOS IPA
+name: Build iOS IPA (Unsigned)
 
 on:
   push:
@@ -15,7 +15,7 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           lfs: true
@@ -55,7 +55,7 @@ jobs:
           chmod +x /tmp/utmt/UndertaleModCli
 
           SRC=ios/Deltarune/GameData/games/ch0.win
-          [ -f "$SRC" ] || { echo "ch0.win missing"; exit 1; }
+          [ -f "$SRC" ] || { echo "ch0.win missing"; ls -la ios/Deltarune/GameData/games/; exit 1; }
 
           cd /tmp/utmt
           dotnet /tmp/utmt/UndertaleModCli.dll load \
@@ -65,14 +65,14 @@ jobs:
 
           cp /tmp/out.bin "$GITHUB_WORKSPACE/ios/Deltarune/GameData/games/game.ios"
           rm -f "$GITHUB_WORKSPACE/$SRC"
-          ls -la "$GITHUB_WORKSPACE/ios/Deltarune/GameData/games/"
+          ls -la "$GITHUB_WORKSPACE/ios/Deltarune/GameData/games/" | head -30
 
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
 
-      - name: Build
+      - name: Build .app
         run: |
           mkdir -p build
           set -o pipefail
@@ -91,21 +91,21 @@ jobs:
           APP=$(find build/derivedData/Build/Products/Release-iphoneos -name "Deltarune.app" -type d | head -1)
           [ -n "$APP" ] || { echo "build failed"; tail -50 build/build.log; exit 1; }
 
-      - name: Locate
+      - name: Locate .app
         id: locate
         run: |
           APP=$(find build/derivedData/Build/Products/Release-iphoneos -name "Deltarune.app" -type d | head -1)
           echo "app_path=$APP" >> "$GITHUB_OUTPUT"
 
-      - name: Verify
+      - name: Verify .app
         run: |
           APP="${{ steps.locate.outputs.app_path }}"
           echo "=== root ==="
           ls -la "$APP/" | head -20
           echo "=== games ==="
-          ls -la "$APP/games/" | head -30
+          ls -la "$APP/games/" | head -40
 
-      - name: Package
+      - name: Package IPA
         run: |
           APP="${{ steps.locate.outputs.app_path }}"
           mkdir -p build/ipa/Payload
@@ -114,7 +114,7 @@ jobs:
           zip -r -q "Deltarune-unsigned.ipa" Payload/
           ls -la Deltarune-unsigned.ipa
 
-      - name: Upload
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: Deltarune-unsigned-ipa

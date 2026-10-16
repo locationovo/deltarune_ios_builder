@@ -37,23 +37,15 @@ jobs:
             -o /tmp/gamedata.tar.gz \
             "https://api.github.com/repos/locationovo/deltarune-data/releases/assets/$ASSET_ID"
 
-          echo "=== tar file info ==="
-          ls -la /tmp/gamedata.tar.gz
-          file /tmp/gamedata.tar.gz
-          echo "=== tar first 10 entries ==="
-          tar -tzf /tmp/gamedata.tar.gz | head -10
-
           rm -rf ios/Deltarune/GameData
           mkdir -p ios/Deltarune/GameData/games
-          tar -xzf /tmp/gamedata.tar.gz -C ios/Deltarune/GameData/games/
-
-          echo "=== extracted ==="
-          ls -la ios/Deltarune/GameData/games/ | head -30
-          COUNT=$(ls ios/Deltarune/GameData/games/ | wc -l)
-          echo "file count: $COUNT"
-          [ "$COUNT" -gt 0 ] || { echo "extract produced no files"; exit 1; }
-
+          tar -xzf /tmp/gamedata.tar.gz -C ios/Deltarune/GameData/games/ --strip-components=1
           rm /tmp/gamedata.tar.gz
+
+          echo "=== games/ contents ==="
+          ls -la ios/Deltarune/GameData/games/ | head -30
+          echo "=== ch0.win check ==="
+          ls -la ios/Deltarune/GameData/games/ch0.win
 
       - name: Setup dotnet
         uses: actions/setup-dotnet@v4

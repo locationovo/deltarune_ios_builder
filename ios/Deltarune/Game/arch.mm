@@ -15,6 +15,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #include <unistd.h>
+#include <objc/runtime.h>
 
 static void (*orig_exit_fn)(int);
 static void (*orig__exit_fn)(int);
@@ -141,13 +142,22 @@ void minimalfunction()
 {
 }
 
-@interface iPad_RunnerAppDelegate (URLScheme)
-@end
-@implementation iPad_RunnerAppDelegate (URLScheme)
-- (BOOL)application:(UIApplication *)app
-            openURL:(NSURL *)url
-            options:(NSDictionary<UIApplicationOpenURLOptionsKey,id> *)options {
+static BOOL dios_openURL(id self, SEL _cmd, UIApplication *app, NSURL *url, NSDictionary *opts) {
     writeArchLog("[openURL] %s", [[url absoluteString] UTF8String]);
     return YES;
 }
-@end
+
+__attribute__((constructor(104))) static void installURLHandler(void) {
+    Class cls = NSClassFromString(@"iPad_RunnerAppDelegate");
+    if (!cls) {
+        writeArchLog("[URLScheme] iPad_RunnerAppDelegate not found");
+        return;
+    }
+    SEL sel = @selector(application:openURL:options:);
+    if (!class_getInstanceMethod(cls, sel)) {
+        class_addMethod(cls, sel, (IMP)dios_openURL, "B@:@@@");
+        writeArchLog("[URLScheme] openURL:options: added");
+    } else {
+        writeArchLog("[URLScheme] openURL:options: already exists");
+    }
+}

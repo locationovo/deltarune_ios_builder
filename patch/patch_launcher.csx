@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using UndertaleModLib;
 using UndertaleModLib.Decompiler;
+using UndertaleModLib.Compiler;
 
 if (Data == null) { Console.WriteLine("Data is null"); return; }
 
@@ -30,12 +31,16 @@ breakIdx += 6;
 string insert =
     "\n            case os_ios:\n" +
     "                {\n" +
-    "                    var _f = file_text_open_write(\"select_chapter_\" + chapstring);\n" +
+    "                    var _f = file_text_open_write(\"chapter\" + chapstring + \".temp\");\n" +
     "                    file_text_close(_f);\n" +
     "                    game_end();\n" +
     "                    return;\n" +
     "                }";
 
 gml = gml.Insert(breakIdx, insert);
-code.ReplaceGML(gml, Data);
+
+var group = new CodeImportGroup(Data);
+group.QueueReplace(code, gml);
+group.Import();
+
 Console.WriteLine("Patched successfully");

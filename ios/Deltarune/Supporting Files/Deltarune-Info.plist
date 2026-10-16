@@ -24,9 +24,9 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
-        <key>NSAllowsArbitraryLoads</key>
-        <true/>
-        <key>NSExceptionDomains</key>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSExceptionDomains</key>
 		<dict/>
 	</dict>
 	<key>CFBundleShortVersionString</key>
@@ -65,16 +65,24 @@
 
 	<key>CFBundleURLTypes</key>
 	<array>
-	  <dict>
-	  <key>CFBundleURLSchemes</key>
-	  <array>
-	  </array>
-	  </dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.locationovo.DELTARUNE</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>dios</string>
+			</array>
+		</dict>
 	</array>
 
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 	</array>
+
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 
 	<key>UIDeviceFamily</key>
 	<array>

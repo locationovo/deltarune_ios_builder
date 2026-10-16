@@ -362,7 +362,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Move GameData folder contents to bundle root so the runner can find game.droid\nif [ -d \"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/GameData\" ]; then\n    cp -R \"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/GameData/\"* \"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/\" 2>/dev/null || true\n    rm -rf \"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/GameData\"\nfi\n";
+			shellScript = "if [ -d \"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/GameData/games\" ]; then\n    mkdir -p \"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/games\"\n    cp -R \"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/GameData/games/\"* \"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/games/\"\n    rm -rf \"${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/GameData\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -510,7 +510,7 @@
 				GCC_PRECOMPILE_PREFIX_HEADER = NO;
 				GCC_PREFIX_HEADER = "Deltarune/Supporting Files/Deltarune-Prefix.pch";
 				INFOPLIST_FILE = "Deltarune/Supporting Files/Deltarune-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Deltarune";
+				INFOPLIST_KEY_CFBundleDisplayName = "DELTARUNE";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LIBRARY_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/**",
@@ -538,7 +538,7 @@
 				GCC_PRECOMPILE_PREFIX_HEADER = NO;
 				GCC_PREFIX_HEADER = "Deltarune/Supporting Files/Deltarune-Prefix.pch";
 				INFOPLIST_FILE = "Deltarune/Supporting Files/Deltarune-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Deltarune";
+				INFOPLIST_KEY_CFBundleDisplayName = "DELTARUNE";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LIBRARY_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/**",
@@ -584,7 +584,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				INFOPLIST_FILE = "Deltarune Tests/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Deltarune";
+				INFOPLIST_KEY_CFBundleDisplayName = "DELTARUNE";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
 				LIBRARY_SEARCH_PATHS = (
@@ -628,7 +628,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				INFOPLIST_FILE = "Deltarune Tests/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "Deltarune";
+				INFOPLIST_KEY_CFBundleDisplayName = "DELTARUNE";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
 				LIBRARY_SEARCH_PATHS = (

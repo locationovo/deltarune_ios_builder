@@ -2,16 +2,23 @@
 //  arch.mm
 //  Deltarune
 //
-//  Chapter switching support via select_chapter_N file detection.
-//  On app launch (before main), checks Documents directory for select_chapter_N.
-//  If found, swaps game data files and deletes the trigger file.
+//  Chapter switching support.
+//  On app launch, scans Documents for select_chapter_N.
+//  Instead of copying data files, sets a global target chapter.
+//  RedirectHook (fopen) rewrites game.ios -> gamN.droid at load time.
 //
 
 #include "fishhook/fishhook.c"
 #include "fishhook/ProbeHook.mm"
+#include "RedirectHook.mm"
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
+#include <unistd.h>
+
+static void (*orig_exit_fn)(int);
+static void (*orig__exit_fn)(int);
+static int g_exiting = 0;
 
 static void applyChapterSwitch(void) {
     @autoreleasepool {
@@ -19,7 +26,6 @@ static void applyChapterSwitch(void) {
         if (docPaths.count == 0) return;
         NSString *docsDir = docPaths[0];
         NSFileManager *fm = [NSFileManager defaultManager];
-        NSString *bundlePath = [[NSBundle mainBundle] bundlePath];
 
         NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"^select_chapter_(\\d+)$"
                                                                                options:0
@@ -47,75 +53,68 @@ static void applyChapterSwitch(void) {
 
         if (triggerFile == nil) return;
 
-        NSLog(@"[ChapterSwitch] Detected %@, switching to chapter %d", triggerFile, chapterNum);
+        NSLog(@"[ChapterSwitch] Detected %@, target chapter %d", triggerFile, chapterNum);
 
-        NSString *gameDroidDest = [docsDir stringByAppendingPathComponent:@"game.droid"];
-        NSString *audioDest = [docsDir stringByAppendingPathComponent:@"audiogroup1.dat"];
-
-        if (chapterNum == 0) {
-            NSError *err = nil;
-            if ([fm fileExistsAtPath:gameDroidDest]) {
-                [fm removeItemAtPath:gameDroidDest error:&err];
-                if (err) NSLog(@"[ChapterSwitch] Failed to remove game.droid: %@", err);
-            }
-            if ([fm fileExistsAtPath:audioDest]) {
-                [fm removeItemAtPath:audioDest error:&err];
-                if (err) NSLog(@"[ChapterSwitch] Failed to remove audiogroup1.dat: %@", err);
-            }
-            NSLog(@"[ChapterSwitch] Reverted to bundle defaults (chapter 0)");
-        } else {
-            NSString *gamSrcName = [NSString stringWithFormat:@"gam%d.droid", chapterNum];
-            NSString *gamSrcPath = [bundlePath stringByAppendingPathComponent:gamSrcName];
-            if (![fm fileExistsAtPath:gamSrcPath]) {
-                NSLog(@"[ChapterSwitch] ERROR: %@ not found in bundle", gamSrcName);
-            } else {
-                NSError *err = nil;
-                if ([fm fileExistsAtPath:gameDroidDest]) {
-                    [fm removeItemAtPath:gameDroidDest error:nil];
-                }
-                [fm copyItemAtPath:gamSrcPath toPath:gameDroidDest error:&err];
-                if (err) {
-                    NSLog(@"[ChapterSwitch] Failed to copy %@: %@", gamSrcName, err);
-                } else {
-                    NSLog(@"[ChapterSwitch] Copied %@ -> Documents/game.droid", gamSrcName);
-                }
-            }
-
-            NSString *audioSrcName = [NSString stringWithFormat:@"audio%droup1.dat", chapterNum];
-            NSString *audioSrcPath = [bundlePath stringByAppendingPathComponent:audioSrcName];
-            if (![fm fileExistsAtPath:audioSrcPath]) {
-                NSLog(@"[ChapterSwitch] WARNING: %@ not found in bundle, skipping audio", audioSrcName);
-            } else {
-                NSError *err = nil;
-                if ([fm fileExistsAtPath:audioDest]) {
-                    [fm removeItemAtPath:audioDest error:nil];
-                }
-                [fm copyItemAtPath:audioSrcPath toPath:audioDest error:&err];
-                if (err) {
-                    NSLog(@"[ChapterSwitch] Failed to copy %@: %@", audioSrcName, err);
-                } else {
-                    NSLog(@"[ChapterSwitch] Copied %@ -> Documents/audiogroup1.dat", audioSrcName);
-                }
-            }
-        }
+        setTargetChapter(chapterNum);
 
         NSString *triggerPath = [docsDir stringByAppendingPathComponent:triggerFile];
         NSError *err = nil;
         [fm removeItemAtPath:triggerPath error:&err];
         if (err) {
             NSLog(@"[ChapterSwitch] Failed to delete trigger file: %@", err);
-        } else {
-            NSLog(@"[ChapterSwitch] Deleted trigger file %@", triggerFile);
         }
     }
 }
 
-__attribute__((constructor(101))) static void probeInitConstructor(void) {
-    installProbeHooks();
+static void handleExitBefore(void) {
+    if (g_exiting) return;
+    g_exiting = 1;
+
+    @autoreleasepool {
+        NSArray *docPaths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+        NSString *docsDir = docPaths.count ? docPaths[0] : nil;
+        if (!docsDir) return;
+
+        NSFileManager *fm = [NSFileManager defaultManager];
+        NSArray *docFiles = [fm contentsOfDirectoryAtPath:docsDir error:nil];
+        BOOL pending = NO;
+        for (NSString *name in docFiles) {
+            if ([name hasPrefix:@"select_chapter_"]) { pending = YES; break; }
+        }
+
+        if (pending) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [[UIApplication sharedApplication]
+                    openURL:[NSURL URLWithString:@"dios://"]
+                    options:@{}
+                    completionHandler:nil];
+            });
+            usleep(500000);
+        }
+    }
 }
 
-__attribute__((constructor)) static void chapterSwitchInit(void) {
+static void my_exit(int code) {
+    handleExitBefore();
+    orig_exit_fn(code);
+}
+
+static void my__exit(int code) {
+    handleExitBefore();
+    orig__exit_fn(code);
+}
+
+__attribute__((constructor(100))) static void chapterSwitchInit(void) {
     applyChapterSwitch();
+    struct rebinding rb[] = {
+        {"exit",  (void*)my_exit,  (void**)&orig_exit_fn},
+        {"_exit", (void*)my__exit, (void**)&orig__exit_fn},
+    };
+    rebind_symbols(rb, 2);
+}
+
+__attribute__((constructor(101))) static void probeInitConstructor(void) {
+    installProbeHooks();
 }
 
 void minimalfunction()

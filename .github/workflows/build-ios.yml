@@ -29,7 +29,6 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/locationovo/deltarune-data/releases/tags/v1" \
             | jq -r '.assets[0].id')
-          echo "ASSET_ID=$ASSET_ID"
           [ "$ASSET_ID" != "null" ] && [ -n "$ASSET_ID" ] || { echo "asset not found"; exit 1; }
 
           curl -fL -H "Authorization: token ${GH_TOKEN}" \
@@ -41,36 +40,37 @@ jobs:
           mkdir -p ios/Deltarune/GameData/games
           tar -xzf /tmp/gamedata.tar.gz -C ios/Deltarune/GameData/games/ --strip-components=1
           rm /tmp/gamedata.tar.gz
-
-          echo "=== games/ contents ==="
           ls -la ios/Deltarune/GameData/games/ | head -30
-          echo "=== ch0.win check ==="
-          ls -la ios/Deltarune/GameData/games/ch0.win
 
       - name: Setup dotnet
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
-      - name: Patch launcher
+      - name: Patch all data files
         run: |
           set -e
           curl -fL -o /tmp/utmt.zip \
             https://github.com/UnderminersTeam/UndertaleModTool/releases/download/0.9.2.0/UTMT_CLI_v0.9.2.0-macOS.zip
           mkdir -p /tmp/utmt && unzip -q /tmp/utmt.zip -d /tmp/utmt
           chmod +x /tmp/utmt/UndertaleModCli
-
-          SRC=ios/Deltarune/GameData/games/ch0.win
-          [ -f "$SRC" ] || { echo "ch0.win missing"; exit 1; }
-
           cd /tmp/utmt
-          dotnet /tmp/utmt/UndertaleModCli.dll load \
-            "$GITHUB_WORKSPACE/$SRC" \
-            -s "$GITHUB_WORKSPACE/patch/patch_launcher.csx" \
-            -o /tmp/out.bin -f
 
-          cp /tmp/out.bin "$GITHUB_WORKSPACE/ios/Deltarune/GameData/games/game.ios"
-          rm -f "$GITHUB_WORKSPACE/$SRC"
+          for FILE in ch0.win gam1.droid gam2.droid gam3.droid gam4.droid gam5.droid; do
+            SRC="$GITHUB_WORKSPACE/ios/Deltarune/GameData/games/$FILE"
+            if [ -f "$SRC" ]; then
+              echo "Target: $FILE"
+              CURRENT_SRC="$SRC"
+              for CSX in $GITHUB_WORKSPACE/patch/*.csx; do
+                echo "  -> $(basename "$CSX")"
+                dotnet UndertaleModCli.dll load "$CURRENT_SRC" -s "$CSX" -o "/tmp/patched.bin" -f
+                mv "/tmp/patched.bin" "$CURRENT_SRC"
+              done
+              if [ "$FILE" = "ch0.win" ]; then
+                  mv "$CURRENT_SRC" "$GITHUB_WORKSPACE/ios/Deltarune/GameData/games/game.ios"
+              fi
+            fi
+          done
           ls -la "$GITHUB_WORKSPACE/ios/Deltarune/GameData/games/" | head -30
 
       - name: Select Xcode
@@ -106,9 +106,7 @@ jobs:
       - name: Verify .app
         run: |
           APP="${{ steps.locate.outputs.app_path }}"
-          echo "=== root ==="
           ls -la "$APP/" | head -20
-          echo "=== games ==="
           ls -la "$APP/games/" | head -40
 
       - name: Package IPA

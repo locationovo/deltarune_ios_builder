@@ -15,28 +15,28 @@ static FILE* (*redir_orig_fopen)(const char*, const char*);
 static FILE* redir_my_fopen(const char* path, const char* mode) {
     if (!path || !mode || mode[0] != 'r') return redir_orig_fopen(path, mode);
     if (g_target_chapter <= 0) return redir_orig_fopen(path, mode);
-    if (!strstr(path, "/games/")) return redir_orig_fopen(path, mode);
-
+    
     static __thread char buffer[PATH_MAX];
 
-    const char *pGame = strstr(path, "/games/game.ios");
-    if (pGame && pGame[15] == 0) {
+    // 1. 拦截 game.ios -> gamN.droid
+    const char *pGame = strstr(path, "games/game.ios");
+    if (pGame && pGame[14] == 0) { // 确保精确匹配到结尾
         size_t prefix = pGame - path;
         if (prefix + 32 < sizeof(buffer)) {
             memcpy(buffer, path, prefix);
-            snprintf(buffer + prefix, sizeof(buffer) - prefix,
-                     "/games/gam%d.droid", g_target_chapter);
+            snprintf(buffer + prefix, sizeof(buffer) - prefix, "games/gam%d.droid", g_target_chapter);
             return redir_orig_fopen(buffer, mode);
         }
     }
 
-    const char *pAudio = strstr(path, "/games/audiogroup1.dat");
+    // 2. 拦截 audiogroup1.dat -> audioNroup1.dat
+    // 第 1 章使用默认的 audiogroup1.dat，所以从第 2 章开始拦截
+    const char *pAudio = strstr(path, "games/audiogroup1.dat");
     if (pAudio && pAudio[22] == 0 && g_target_chapter >= 2) {
         size_t prefix = pAudio - path;
         if (prefix + 32 < sizeof(buffer)) {
             memcpy(buffer, path, prefix);
-            snprintf(buffer + prefix, sizeof(buffer) - prefix,
-                     "/games/audio%droup1.dat", g_target_chapter);
+            snprintf(buffer + prefix, sizeof(buffer) - prefix, "games/audio%droup1.dat", g_target_chapter);
             return redir_orig_fopen(buffer, mode);
         }
     }

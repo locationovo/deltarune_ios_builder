@@ -14,9 +14,18 @@
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
+#import <Security/Security.h>
 #include <unistd.h>
 #include <objc/runtime.h>
 #include <signal.h>
+#include <spawn.h>
+#include <errno.h>
+#include <string.h>
+
+extern char **environ;
+
+extern "C" void *SecTaskCreateFromSelf(CFAllocatorRef allocator);
+extern "C" CFTypeRef SecTaskCopyValueForEntitlement(void *task, CFStringRef entitlement, CFErrorRef *error);
 
 static void (*libc_exit)(int);
 static void (*libc__exit)(int);
@@ -34,6 +43,65 @@ static void write_log(const char *fmt, ...) {
         vfprintf(f, fmt, ap);
         va_end(ap); fprintf(f, "\n"); fclose(f);
     }
+}
+
+static BOOL isTrollStoreEnv(void) {
+    static BOOL cached = NO;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        void *task = SecTaskCreateFromSelf(kCFAllocatorDefault);
+        if (task) {
+            BOOL hit = NO;
+            CFStringRef keys[] = {
+                CFSTR("platform-application"),
+                CFSTR("com.apple.private.security.no-sandbox"),
+                CFSTR("com.apple.private.security.no-container"),
+            };
+            for (int i = 0; i < 3 && !hit; i++) {
+                CFTypeRef v = SecTaskCopyValueForEntitlement(task, keys[i], NULL);
+                if (v) { hit = YES; CFRelease(v); }
+            }
+            CFRelease(task);
+            if (hit) { cached = YES; return; }
+        }
+        NSFileManager *fm = [NSFileManager defaultManager];
+        if ([fm fileExistsAtPath:@"/var/mobile/Library/Preferences/com.opa334.TrollStore.plist"]) { cached = YES; return; }
+        if ([fm fileExistsAtPath:@"/var/mobile/Library/Preferences/com.opa334.trollstorepreferences.plist"]) { cached = YES; return; }
+        if ([fm fileExistsAtPath:@"/Applications/TrollStore.app"]) { cached = YES; return; }
+        NSString *bundle = [[NSBundle mainBundle] bundlePath];
+        NSString *parent = [bundle stringByDeletingLastPathComponent];
+        if ([fm fileExistsAtPath:[parent stringByAppendingPathComponent:@".TrollStore"]]) { cached = YES; return; }
+        NSString *grand = [parent stringByDeletingLastPathComponent];
+        if ([fm fileExistsAtPath:[grand stringByAppendingPathComponent:@".TrollStore"]]) { cached = YES; return; }
+    });
+    return cached;
+}
+
+static BOOL relaunch_self(void) {
+    NSString *exe = [[NSBundle mainBundle] executablePath];
+    if (!exe) { write_log("[relaunch] no executablePath"); return NO; }
+    const char *exePath = [exe fileSystemRepresentation];
+
+    pid_t pid = 0;
+    char *const argv[] = { (char *)exePath, NULL };
+
+    posix_spawnattr_t attr;
+    posix_spawnattr_init(&attr);
+    sigset_t empty, def;
+    sigemptyset(&empty);
+    sigemptyset(&def);
+    posix_spawnattr_setsigmask(&attr, &empty);
+    posix_spawnattr_setsigdefault(&attr, &def);
+    posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK);
+
+    errno = 0;
+    int rc = posix_spawn(&pid, exePath, NULL, &attr, argv, environ);
+    int e = errno;
+    posix_spawnattr_destroy(&attr);
+
+    write_log("[relaunch] posix_spawn rc=%d pid=%d errno=%d(%s)",
+              rc, (int)pid, e, strerror(e));
+    return rc == 0;
 }
 
 static void handle_pending_switch(void) {
@@ -96,15 +164,24 @@ static void check_pending_before_exit(void) {
         if (!pending && [fm fileExistsAtPath:[docsDir stringByAppendingPathComponent:@"launcher.temp"]]) pending = YES;
         if (!pending && [fm fileExistsAtPath:[docsDir stringByAppendingPathComponent:@"quit.temp"]]) pending = YES;
 
-        if (pending) {
-            write_log("[exit] openURL");
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"dios://"] options:@{} completionHandler:nil];
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    kill(getpid(), SIGKILL);
-                });
-            });
+        if (!pending) return;
+
+        if (isTrollStoreEnv()) {
+            write_log("[exit] TrollStore relaunch");
+            if (relaunch_self()) {
+                _exit(0);
+            }
+            write_log("[exit] relaunch failed, fallback");
+        } else {
+            write_log("[exit] signed env, old behavior");
         }
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"dios://"] options:@{} completionHandler:nil];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                kill(getpid(), SIGKILL);
+            });
+        });
     }
 }
 
@@ -116,7 +193,7 @@ static void start_temp_poller(void) {
     dispatch_queue_t q = dispatch_get_global_queue(QOS_CLASS_UTILITY, 0);
     poller_timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, q);
     dispatch_source_set_timer(poller_timer, dispatch_time(DISPATCH_TIME_NOW, 0), 100 * NSEC_PER_MSEC, 10 * NSEC_PER_MSEC);
-    
+
     dispatch_source_set_event_handler(poller_timer, ^{
         @autoreleasepool {
             if (is_exiting) return;
@@ -135,6 +212,13 @@ static void start_temp_poller(void) {
 
             if (pending) {
                 is_exiting = 1;
+                if (isTrollStoreEnv()) {
+                    write_log("[poller] TrollStore relaunch");
+                    if (relaunch_self()) {
+                        _exit(0);
+                    }
+                    write_log("[poller] relaunch failed, fallback");
+                }
                 dispatch_async(dispatch_get_main_queue(), ^{
                     write_log("[poller] main thread restart");
                     [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"dios://"] options:@{} completionHandler:nil];

@@ -18,8 +18,18 @@ void ReplaceFunction(string funcName, string newGml) {
     }
 }
 
+ReplaceFunction("gml_GlobalScript_scr_84_get_lang_string", @"function scr_84_get_lang_string(arg0)
+{
+    global.dbg_last_op = ""LangGet: "" + string(arg0);
+    if (is_undefined(global.lang_map) || global.lang_map == -4) return string(arg0);
+    var res = ds_map_find_value(global.lang_map, arg0);
+    if (is_undefined(res)) return string(arg0);
+    return res;
+}");
+
 ReplaceFunction("gml_GlobalScript_scr_chapterswitch", @"function scr_chapterswitch(arg0 = 0)
 {
+    global.dbg_last_op = ""Switch: "" + string(arg0);
     if (os_type == os_ios)
     {
         var _f;
@@ -64,7 +74,7 @@ if (selObj != null) {
             "                {\n" +
             "                    var _f = file_text_open_write(\"select_chapter_\" + chapstring);\n" +
             "                    file_text_close(_f);\n" +
-            "                    exit;\n" +
+            "                    return;\n" +
             "                }";
         gml = gml.Insert(breakIdx, insert);
         group.QueueReplace(selObj, gml);
@@ -72,12 +82,42 @@ if (selObj != null) {
     }
 }
 
+var timeObj = Data.Code.FirstOrDefault(c => c.Name.Content == "gml_Object_obj_time_Draw_77");
+if (timeObj != null) {
+    string gml = new Underanalyzer.Decompiler.DecompileContext(ctx, timeObj, Data.ToolInfo.DecompilerSettings).DecompileToString().Replace("\r\n", "\n");
+    string append = "\nif (variable_global_exists(\"dbg_show\") && global.dbg_show) {\n" +
+        "    var w = display_get_gui_width();\n" +
+        "    draw_set_color(c_black);\n" +
+        "    draw_set_alpha(0.5);\n" +
+        "    draw_rectangle(w - 260, 10, w - 10, 80, false);\n" +
+        "    draw_set_alpha(1);\n" +
+        "    draw_set_color(c_lime);\n" +
+        "    draw_set_font(fnt_main);\n" +
+        "    draw_set_halign(fa_right);\n" +
+        "    var info = \"FPS: \" + string(fps_real) + \"\\nRoom: \" + string(room);\n" +
+        "    if (variable_global_exists(\"dbg_last_op\")) info += \"\\nOp: \" + global.dbg_last_op;\n" +
+        "    draw_text(w - 20, 20, info);\n" +
+        "    draw_set_halign(fa_left);\n" +
+        "    draw_set_color(c_white);\n" +
+        "}\n";
+    group.QueueReplace(timeObj, gml + append);
+    patched++;
+}
+
+var initObj = Data.Code.FirstOrDefault(c => c.Name.Content == "gml_Object_obj_initializer_Create_0");
+if (initObj != null) {
+    string gml = new Underanalyzer.Decompiler.DecompileContext(ctx, initObj, Data.ToolInfo.DecompilerSettings).DecompileToString().Replace("\r\n", "\n");
+    string append = "\nglobal.dbg_show = true;\nglobal.dbg_last_op = \"Init\";\n";
+    group.QueueReplace(initObj, gml + append);
+    patched++;
+}
+
 var devMenuObj = Data.Code.FirstOrDefault(c => c.Name.Content == "gml_Object_DEVICE_MENU_Step_0");
 if (devMenuObj != null) {
     string gml = new Underanalyzer.Decompiler.DecompileContext(ctx, devMenuObj, Data.ToolInfo.DecompilerSettings).DecompileToString().Replace("\r\n", "\n");
     if (gml.Contains("game_end();")) {
         gml = gml.Replace("game_end();", 
-            @"file_text_close(file_text_open_write(""quit.temp""))");
+            @"global.dbg_last_op = ""Quit""; file_text_close(file_text_open_write(""quit.temp""))");
         group.QueueReplace(devMenuObj, gml);
         patched++;
     }

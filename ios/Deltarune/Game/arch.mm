@@ -30,12 +30,9 @@ static void write_log(const char *fmt, ...) {
         NSString *path = [docs[0] stringByAppendingPathComponent:@"arch.log"];
         FILE *f = fopen([path UTF8String], "a");
         if (!f) return;
-        va_list ap;
-        va_start(ap, fmt);
+        va_list ap; va_start(ap, fmt);
         vfprintf(f, fmt, ap);
-        va_end(ap);
-        fprintf(f, "\n");
-        fclose(f);
+        va_end(ap); fprintf(f, "\n"); fclose(f);
     }
 }
 
@@ -96,38 +93,28 @@ static void check_pending_before_exit(void) {
         for (NSString *name in docFiles) {
             if ([name hasPrefix:@"select_chapter_"]) { pending = YES; break; }
         }
-        if (!pending && [fm fileExistsAtPath:[docsDir stringByAppendingPathComponent:@"launcher.temp"]]) {
-            pending = YES;
-        }
-        if (!pending && [fm fileExistsAtPath:[docsDir stringByAppendingPathComponent:@"quit.temp"]]) {
-            pending = YES;
-        }
+        if (!pending && [fm fileExistsAtPath:[docsDir stringByAppendingPathComponent:@"launcher.temp"]]) pending = YES;
+        if (!pending && [fm fileExistsAtPath:[docsDir stringByAppendingPathComponent:@"quit.temp"]]) pending = YES;
 
         if (pending) {
             write_log("[exit] openURL");
             dispatch_async(dispatch_get_main_queue(), ^{
                 [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"dios://"] options:@{} completionHandler:nil];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    kill(getpid(), SIGKILL);
+                });
             });
-            CFRunLoopRunInMode(kCFRunLoopDefaultMode, 1.0, false);
         }
     }
 }
 
-static void hook_exit(int code) {
-    check_pending_before_exit();
-    libc_exit(code);
-}
-
-static void hook__exit(int code) {
-    check_pending_before_exit();
-    libc__exit(code);
-}
+static void hook_exit(int code) { check_pending_before_exit(); libc_exit(code); }
+static void hook__exit(int code) { check_pending_before_exit(); libc__exit(code); }
 
 static void start_temp_poller(void) {
     if (poller_timer) return;
     dispatch_queue_t q = dispatch_get_global_queue(QOS_CLASS_UTILITY, 0);
     poller_timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, q);
-    
     dispatch_source_set_timer(poller_timer, dispatch_time(DISPATCH_TIME_NOW, 0), 100 * NSEC_PER_MSEC, 10 * NSEC_PER_MSEC);
     
     dispatch_source_set_event_handler(poller_timer, ^{
@@ -143,20 +130,17 @@ static void start_temp_poller(void) {
                 NSString *t = [docDir stringByAppendingPathComponent:[NSString stringWithFormat:@"select_chapter_%d", i]];
                 if ([fm fileExistsAtPath:t]) { pending = YES; break; }
             }
-            if (!pending && [fm fileExistsAtPath:[docDir stringByAppendingPathComponent:@"launcher.temp"]]) {
-                pending = YES;
-            }
-            if (!pending && [fm fileExistsAtPath:[docDir stringByAppendingPathComponent:@"quit.temp"]]) {
-                pending = YES;
-            }
+            if (!pending && [fm fileExistsAtPath:[docDir stringByAppendingPathComponent:@"launcher.temp"]]) pending = YES;
+            if (!pending && [fm fileExistsAtPath:[docDir stringByAppendingPathComponent:@"quit.temp"]]) pending = YES;
 
             if (pending) {
                 is_exiting = 1;
                 dispatch_async(dispatch_get_main_queue(), ^{
                     write_log("[poller] main thread restart");
                     [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"dios://"] options:@{} completionHandler:nil];
-                    usleep(200000);
-                    kill(getpid(), SIGKILL);
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                        kill(getpid(), SIGKILL);
+                    });
                 });
             }
         }
@@ -174,9 +158,7 @@ __attribute__((constructor(100))) static void init_chapter(void) {
     start_temp_poller();
 }
 
-__attribute__((constructor(101))) static void init_probe(void) {
-    installProbeHooks();
-}
+__attribute__((constructor(101))) static void init_probe(void) { installProbeHooks(); }
 
 static BOOL handle_open_url(id self, SEL _cmd, UIApplication *app, NSURL *url, NSDictionary *opts) {
     write_log("[openURL] %s", [[url absoluteString] UTF8String]);

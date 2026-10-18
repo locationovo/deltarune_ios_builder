@@ -29,7 +29,7 @@ ReplaceFunction("gml_GlobalScript_scr_84_get_lang_string", @"function scr_84_get
 ReplaceFunction("gml_GlobalScript_scr_84_lang_load", @"function scr_84_lang_load()
 {
     var name = ""lang_ch1_cxkcxkckx_"" + global.lang + "".json"";
-    if (global.lang == ""ja"" && !file_exists(working_directory + ""lang/"" + name) && !file_exists(name)) {
+    if (global.lang == ""ja"" && !file_exists(working_directory + ""lang/"" + name)) {
         name = ""lang_ja.json"";
     }
     var orig_filename = working_directory + ""lang/"" + name;
@@ -37,6 +37,14 @@ ReplaceFunction("gml_GlobalScript_scr_84_lang_load", @"function scr_84_lang_load
     var filename = orig_filename;
     var type = ""orig"";
     var orig_map = scr_84_load_map_json(orig_filename);
+    
+    if (ds_map_size(orig_map) == 0) {
+        orig_map = scr_84_load_map_json(""lang/"" + name);
+    }
+    if (ds_map_size(orig_map) == 0) {
+        orig_map = scr_84_load_map_json(name);
+    }
+    
     if (ossafe_file_exists(new_filename))
     {
         var new_map = scr_84_load_map_json(new_filename);

@@ -229,7 +229,7 @@ static void start_temp_poller(void) {
     if (poller_timer) return;
     dispatch_queue_t q = dispatch_get_global_queue(QOS_CLASS_UTILITY, 0);
     poller_timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, q);
-    dispatch_source_set_timer(poller_timer, dispatch_time(DISPATCH_TIME_NOW, 0), 50 * NSEC_PER_MSEC, 10 * NSEC_PER_MSEC);
+    dispatch_source_set_timer(poller_timer, dispatch_time(DISPATCH_TIME_NOW, 0), 16 * NSEC_PER_MSEC, 10 * NSEC_PER_MSEC);
 
     dispatch_source_set_event_handler(poller_timer, ^{
         @autoreleasepool {
@@ -240,15 +240,17 @@ static void start_temp_poller(void) {
             NSString *docDir = docs[0];
             NSFileManager *fm = [NSFileManager defaultManager];
 
-            BOOL hasChapter = NO;
+            BOOL hasPending = NO;
+            if ([fm fileExistsAtPath:[docDir stringByAppendingPathComponent:@"launcher.temp"]]) hasPending = YES;
+            if ([fm fileExistsAtPath:[docDir stringByAppendingPathComponent:@"quit.temp"]]) hasPending = YES;
             for (int i = 1; i <= 9; i++) {
                 NSString *t = [docDir stringByAppendingPathComponent:[NSString stringWithFormat:@"select_chapter_%d", i]];
-                if ([fm fileExistsAtPath:t]) { hasChapter = YES; break; }
+                if ([fm fileExistsAtPath:t]) { hasPending = YES; break; }
             }
-            if (!hasChapter) return;
+            if (!hasPending) return;
 
             if (atomic_exchange(&is_exiting, 1)) return;
-            write_log("[poller] chapter file detected, immediate relaunch");
+            write_log("[poller] immediate relaunch");
             do_relaunch_or_fallback("poller");
         }
     });

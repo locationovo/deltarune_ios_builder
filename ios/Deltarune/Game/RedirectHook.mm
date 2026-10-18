@@ -10,6 +10,10 @@ void setTargetChapter(int chapter) {
     g_target_chapter = chapter;
 }
 
+int getTargetChapter(void) {
+    return g_target_chapter;
+}
+
 static FILE* (*redir_orig_fopen)(const char*, const char*);
 
 static FILE* redir_my_fopen(const char* path, const char* mode) {
@@ -46,8 +50,4 @@ __attribute__((constructor(103))) static void installRedirect(void) {
         {"fopen", (void*)redir_my_fopen, (void**)&redir_orig_fopen},
     };
     rebind_symbols(rb, 1);
-}
-
-int getTargetChapter(void) {
-    return g_target_chapter;
 }

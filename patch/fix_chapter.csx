@@ -64,7 +64,7 @@ if (selObj != null) {
             "                {\n" +
             "                    var _f = file_text_open_write(\"select_chapter_\" + chapstring);\n" +
             "                    file_text_close(_f);\n" +
-            "                    return;\n" +
+            "                    exit;\n" +
             "                }";
         gml = gml.Insert(breakIdx, insert);
         group.QueueReplace(selObj, gml);
@@ -77,7 +77,7 @@ if (devMenuObj != null) {
     string gml = new Underanalyzer.Decompiler.DecompileContext(ctx, devMenuObj, Data.ToolInfo.DecompilerSettings).DecompileToString().Replace("\r\n", "\n");
     if (gml.Contains("game_end();")) {
         gml = gml.Replace("game_end();", 
-            @"file_text_close(file_text_open_write(""quit.temp""));");
+            @"file_text_close(file_text_open_write(""quit.temp""))");
         group.QueueReplace(devMenuObj, gml);
         patched++;
     }

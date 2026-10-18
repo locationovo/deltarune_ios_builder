@@ -16,7 +16,7 @@
 #import <UIKit/UIKit.h>
 #include <unistd.h>
 #include <objc/runtime.h>
-#include <stdlib.h>
+#include <signal.h>
 
 static void (*libc_exit)(int);
 static void (*libc__exit)(int);
@@ -48,10 +48,8 @@ static void handle_pending_switch(void) {
 
         NSString *quitTemp = [docsDir stringByAppendingPathComponent:@"quit.temp"];
         if ([fm fileExistsAtPath:quitTemp]) {
-            setTargetChapter(0);
             [fm removeItemAtPath:quitTemp error:nil];
-            write_log("[switch] quit");
-            return;
+            write_log("[cleanup] removed stale quit.temp");
         }
 
         NSString *launcherTemp = [docsDir stringByAppendingPathComponent:@"launcher.temp"];
@@ -153,13 +151,13 @@ static void start_temp_poller(void) {
             }
 
             if (pending) {
-                write_log("[poller] force restart");
                 is_exiting = 1;
                 dispatch_async(dispatch_get_main_queue(), ^{
+                    write_log("[poller] main thread restart");
                     [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"dios://"] options:@{} completionHandler:nil];
+                    usleep(200000);
+                    kill(getpid(), SIGKILL);
                 });
-                usleep(300000);
-                _exit(0);
             }
         }
     });

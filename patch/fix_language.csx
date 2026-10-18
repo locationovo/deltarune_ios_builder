@@ -5,13 +5,20 @@ using UndertaleModLib;
 using UndertaleModLib.Decompiler;
 using UndertaleModLib.Compiler;
 
-if (Data == null) { return; }
-GlobalDecompileContext ctx = new GlobalDecompileContext(Data);
-CodeImportGroup group = new CodeImportGroup(Data);
+if (Data == null) { Console.WriteLine("Data is null"); return; }
+var ctx = new GlobalDecompileContext(Data);
+var group = new CodeImportGroup(Data);
+int patched = 0;
 
-var code1 = Data.Code.FirstOrDefault(c => c.Name.Content == "gml_GlobalScript_scr_84_load_map_json");
-if (code1 != null) {
-    string gml1 = @"function scr_84_load_map_json(arg0)
+void ReplaceFunction(string funcName, string newGml) {
+    var code = Data.Code.FirstOrDefault(c => c.Name.Content == funcName);
+    if (code != null) {
+        group.QueueReplace(code, newGml);
+        patched++;
+    }
+}
+
+ReplaceFunction("gml_GlobalScript_scr_84_load_map_json", @"function scr_84_load_map_json(arg0)
 {
     var file_buffer = -1;
     try { file_buffer = buffer_load(arg0); } catch (_e) {}
@@ -25,20 +32,22 @@ if (code1 != null) {
     }
     if (file_buffer != -1) buffer_delete(file_buffer);
     return ds_map_create();
-}";
-    group.QueueReplace(code1, gml1);
-}
+}");
 
-var code2 = Data.Code.FirstOrDefault(c => c.Name.Content == "gml_GlobalScript_scr_84_get_lang_string");
-if (code2 != null) {
-    string gml2 = @"function scr_84_get_lang_string(arg0)
+ReplaceFunction("gml_GlobalScript_scr_84_get_lang_string", @"function scr_84_get_lang_string(arg0)
 {
     if (is_undefined(global.lang_map) || global.lang_map == -4) return string(arg0);
     var res = ds_map_find_value(global.lang_map, arg0);
     if (is_undefined(res)) return string(arg0);
     return res;
-}";
-    group.QueueReplace(code2, gml2);
+}");
+
+var menuDraw = Data.Code.FirstOrDefault(c => c.Name.Content == "gml_Object_DEVICE_MENU_Draw_0");
+if (menuDraw != null) {
+    string gml = new Underanalyzer.Decompiler.DecompileContext(ctx, menuDraw, Data.ToolInfo.DecompilerSettings).DecompileToString().Replace("\r\n", "\n");
+    gml = gml.Replace("draw_set_font(fnt_ja_main);", "draw_set_font(fnt_main);");
+    group.QueueReplace(menuDraw, gml);
+    patched++;
 }
 
 group.Import();

@@ -45,6 +45,14 @@ static void handle_pending_switch(void) {
         NSString *docsDir = docPaths[0];
         NSFileManager *fm = [NSFileManager defaultManager];
 
+        NSString *quitTemp = [docsDir stringByAppendingPathComponent:@"quit.temp"];
+        if ([fm fileExistsAtPath:quitTemp]) {
+            setTargetChapter(0);
+            [fm removeItemAtPath:quitTemp error:nil];
+            write_log("[switch] quit");
+            return;
+        }
+
         NSString *launcherTemp = [docsDir stringByAppendingPathComponent:@"launcher.temp"];
         if ([fm fileExistsAtPath:launcherTemp]) {
             setTargetChapter(0);
@@ -92,24 +100,16 @@ static void check_pending_before_exit(void) {
         if (!pending && [fm fileExistsAtPath:[docsDir stringByAppendingPathComponent:@"launcher.temp"]]) {
             pending = YES;
         }
-
-        if (!pending) {
-            NSString *lt = [docsDir stringByAppendingPathComponent:@"launcher.temp"];
-            FILE *f = fopen([lt UTF8String], "w");
-            if (f) fclose(f);
-            write_log("[exit] forced launcher.temp");
+        if (!pending && [fm fileExistsAtPath:[docsDir stringByAppendingPathComponent:@"quit.temp"]]) {
+            pending = YES;
         }
 
-        write_log("[exit] openURL");
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"dios://"] options:@{} completionHandler:^(BOOL success) {
-                write_log("[exit] openURL callback: %d", success);
-                usleep(200000);
-                libc_exit(0);
-            }];
-        });
-        while (1) {
-            usleep(100000);
+        if (pending) {
+            write_log("[exit] openURL");
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"dios://"] options:@{} completionHandler:nil];
+            });
+            CFRunLoopRunInMode(kCFRunLoopDefaultMode, 1.0, false);
         }
     }
 }
@@ -128,7 +128,9 @@ static void start_temp_poller(void) {
     if (poller_timer) return;
     dispatch_queue_t q = dispatch_get_global_queue(QOS_CLASS_UTILITY, 0);
     poller_timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, q);
-    dispatch_source_set_timer(poller_timer, dispatch_time(DISPATCH_TIME_NOW, 0), 300 * NSEC_PER_MSEC, 100 * NSEC_PER_MSEC);
+    
+    dispatch_source_set_timer(poller_timer, dispatch_time(DISPATCH_TIME_NOW, 0), 100 * NSEC_PER_MSEC, 10 * NSEC_PER_MSEC);
+    
     dispatch_source_set_event_handler(poller_timer, ^{
         @autoreleasepool {
             if (is_exiting) return;
@@ -143,6 +145,9 @@ static void start_temp_poller(void) {
                 if ([fm fileExistsAtPath:t]) { pending = YES; break; }
             }
             if (!pending && [fm fileExistsAtPath:[docDir stringByAppendingPathComponent:@"launcher.temp"]]) {
+                pending = YES;
+            }
+            if (!pending && [fm fileExistsAtPath:[docDir stringByAppendingPathComponent:@"quit.temp"]]) {
                 pending = YES;
             }
 

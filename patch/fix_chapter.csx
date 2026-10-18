@@ -5,13 +5,20 @@ using UndertaleModLib;
 using UndertaleModLib.Decompiler;
 using UndertaleModLib.Compiler;
 
-if (Data == null) { return; }
-GlobalDecompileContext ctx = new GlobalDecompileContext(Data);
-CodeImportGroup group = new CodeImportGroup(Data);
+if (Data == null) { Console.WriteLine("Data is null"); return; }
+var ctx = new GlobalDecompileContext(Data);
+var group = new CodeImportGroup(Data);
+int patched = 0;
 
-var code1 = Data.Code.FirstOrDefault(c => c.Name.Content == "gml_GlobalScript_scr_chapterswitch");
-if (code1 != null) {
-    string gml1 = @"function scr_chapterswitch(arg0 = 0)
+void ReplaceFunction(string funcName, string newGml) {
+    var code = Data.Code.FirstOrDefault(c => c.Name.Content == funcName);
+    if (code != null) {
+        group.QueueReplace(code, newGml);
+        patched++;
+    }
+}
+
+ReplaceFunction("gml_GlobalScript_scr_chapterswitch", @"function scr_chapterswitch(arg0 = 0)
 {
     if (os_type == os_ios)
     {
@@ -19,8 +26,7 @@ if (code1 != null) {
         if (arg0 == 0) { _f = file_text_open_write(""launcher.temp""); }
         else { _f = file_text_open_write(""select_chapter_"" + string(arg0)); }
         file_text_close(_f);
-        game_end();
-        return;
+        exit;
     }
     var parameters = get_chapter_switch_parameters();
     if (arg0 == 0) {
@@ -45,26 +51,38 @@ if (code1 != null) {
             }
         }
     }
-}";
-    group.QueueReplace(code1, gml1);
-}
+}");
 
-var code2 = Data.Code.FirstOrDefault(c => c.Name.Content == "gml_Object_obj_CHAPTER_SELECT_Create_0");
-if (code2 != null) {
-    string gml2 = new Underanalyzer.Decompiler.DecompileContext(ctx, code2, Data.ToolInfo.DecompilerSettings).DecompileToString().Replace("\r\n", "\n");
+var selObj = Data.Code.FirstOrDefault(c => c.Name.Content == "gml_Object_obj_CHAPTER_SELECT_Create_0");
+if (selObj != null) {
+    string gml = new Underanalyzer.Decompiler.DecompileContext(ctx, selObj, Data.ToolInfo.DecompilerSettings).DecompileToString().Replace("\r\n", "\n");
     string needle = "ossafe_game_change(\"ch\" + chapstring);";
-    if (gml2.Contains(needle) && !gml2.Contains("case os_ios:")) {
-        int idx = gml2.IndexOf(needle);
-        int breakIdx = gml2.IndexOf("break;", idx) + 6;
+    if (gml.Contains(needle) && !gml.Contains("case os_ios:")) {
+        int idx = gml.IndexOf(needle);
+        int breakIdx = gml.IndexOf("break;", idx) + 6;
         string insert = "\n            case os_ios:\n" +
             "                {\n" +
             "                    var _f = file_text_open_write(\"select_chapter_\" + chapstring);\n" +
             "                    file_text_close(_f);\n" +
-            "                    game_end();\n" +
-            "                    return;\n" +
+            "                    exit;\n" +
             "                }";
-        gml2 = gml2.Insert(breakIdx, insert);
-        group.QueueReplace(code2, gml2);
+        gml = gml.Insert(breakIdx, insert);
+        group.QueueReplace(selObj, gml);
+        patched++;
+    }
+}
+
+foreach (var code in Data.Code) {
+    string gml;
+    try {
+        gml = new Underanalyzer.Decompiler.DecompileContext(ctx, code, Data.ToolInfo.DecompilerSettings).DecompileToString();
+    } catch { continue; }
+    
+    if (gml.Contains("game_end();")) {
+        string newGml = gml.Replace("game_end();", 
+            @"{ if (os_type == os_ios) { var _f_exit = file_text_open_write(""quit.temp""); file_text_close(_f_exit); exit; } else { game_end(); } }");
+        group.QueueReplace(code, newGml);
+        patched++;
     }
 }
 

@@ -96,9 +96,15 @@ static void check_pending_before_exit(void) {
         if (pending) {
             write_log("[exit] openURL");
             dispatch_async(dispatch_get_main_queue(), ^{
-                [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"dios://"] options:@{} completionHandler:nil];
+                [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"dios://"] options:@{} completionHandler:^(BOOL success) {
+                    write_log("[exit] openURL callback: %d", success);
+                    usleep(200000);
+                    libc_exit(0);
+                }];
             });
-            usleep(500000);
+            while (1) {
+                usleep(100000);
+            }
         }
     }
 }

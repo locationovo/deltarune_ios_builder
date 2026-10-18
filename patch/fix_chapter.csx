@@ -26,7 +26,7 @@ ReplaceFunction("gml_GlobalScript_scr_chapterswitch", @"function scr_chapterswit
         if (arg0 == 0) { _f = file_text_open_write(""launcher.temp""); }
         else { _f = file_text_open_write(""select_chapter_"" + string(arg0)); }
         file_text_close(_f);
-        exit;
+        return;
     }
     var parameters = get_chapter_switch_parameters();
     if (arg0 == 0) {
@@ -64,7 +64,7 @@ if (selObj != null) {
             "                {\n" +
             "                    var _f = file_text_open_write(\"select_chapter_\" + chapstring);\n" +
             "                    file_text_close(_f);\n" +
-            "                    exit;\n" +
+            "                    return;\n" +
             "                }";
         gml = gml.Insert(breakIdx, insert);
         group.QueueReplace(selObj, gml);
@@ -72,16 +72,13 @@ if (selObj != null) {
     }
 }
 
-foreach (var code in Data.Code) {
-    string gml;
-    try {
-        gml = new Underanalyzer.Decompiler.DecompileContext(ctx, code, Data.ToolInfo.DecompilerSettings).DecompileToString();
-    } catch { continue; }
-    
+var devMenuObj = Data.Code.FirstOrDefault(c => c.Name.Content == "gml_Object_DEVICE_MENU_Step_0");
+if (devMenuObj != null) {
+    string gml = new Underanalyzer.Decompiler.DecompileContext(ctx, devMenuObj, Data.ToolInfo.DecompilerSettings).DecompileToString().Replace("\r\n", "\n");
     if (gml.Contains("game_end();")) {
-        string newGml = gml.Replace("game_end();", 
-            @"file_text_close(file_text_open_write(""quit.temp""))");
-        group.QueueReplace(code, newGml);
+        gml = gml.Replace("game_end();", 
+            @"var _f_quit = file_text_open_write(""quit.temp""); file_text_close(_f_quit);");
+        group.QueueReplace(devMenuObj, gml);
         patched++;
     }
 }

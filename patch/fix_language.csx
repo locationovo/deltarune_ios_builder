@@ -18,72 +18,50 @@ void ReplaceFunction(string funcName, string newGml) {
     }
 }
 
-ReplaceFunction("gml_GlobalScript_scr_chapterswitch", @"function scr_chapterswitch(arg0 = 0)
+ReplaceFunction("gml_GlobalScript_scr_84_get_lang_string", @"function scr_84_get_lang_string(arg0)
 {
-    if (os_type == os_ios)
-    {
-        var _f;
-        if (arg0 == 0) { _f = file_text_open_write(""launcher.temp""); }
-        else { _f = file_text_open_write(""select_chapter_"" + string(arg0)); }
-        file_text_close(_f);
-        exit;
-    }
-    var parameters = get_chapter_switch_parameters();
-    if (arg0 == 0) {
-        if (scr_is_switch_os()) { game_change(""rom:/"", parameters); }
-        else {
-            switch (os_type) {
-                case os_windows: game_change(""/../"", ""-game data.win"" + parameters); break;
-                case os_ps4: game_change("""", ""-game /app0/games/game.win"" + parameters); break;
-                case os_ps5: game_change("""", ""-game /app0/games/game.win"" + parameters); break;
-                case os_macosx: game_change("".."", parameters); break;
-            }
-        }
-    } else {
-        var chapstring = string(arg0);
-        if (scr_is_switch_os()) { game_change(""rom:/chapter"" + chapstring + ""_switch/"", parameters); }
-        else {
-            switch (os_type) {
-                case os_windows: game_change(""/../chapter"" + chapstring + ""_windows"", ""-game data.win"" + parameters); break;
-                case os_ps4: game_change("""", ""-game /app0/games/chapter"" + chapstring + ""_ps4/game.win"" + parameters); break;
-                case os_ps5: game_change("""", ""-game /app0/games/chapter"" + chapstring + ""_ps5/game.win"" + parameters); break;
-                case os_macosx: game_change(""../chapter"" + chapstring + ""_mac"", parameters); break;
-            }
-        }
-    }
+    if (is_undefined(global.lang_map) || global.lang_map == -4) return string(arg0);
+    var res = ds_map_find_value(global.lang_map, arg0);
+    if (is_undefined(res)) return string(arg0);
+    return res;
 }");
 
-var selObj = Data.Code.FirstOrDefault(c => c.Name.Content == "gml_Object_obj_CHAPTER_SELECT_Create_0");
-if (selObj != null) {
-    string gml = new Underanalyzer.Decompiler.DecompileContext(ctx, selObj, Data.ToolInfo.DecompilerSettings).DecompileToString().Replace("\r\n", "\n");
-    string needle = "ossafe_game_change(\"ch\" + chapstring);";
-    if (gml.Contains(needle) && !gml.Contains("case os_ios:")) {
-        int idx = gml.IndexOf(needle);
-        int breakIdx = gml.IndexOf("break;", idx) + 6;
-        string insert = "\n            case os_ios:\n" +
-            "                {\n" +
-            "                    var _f = file_text_open_write(\"select_chapter_\" + chapstring);\n" +
-            "                    file_text_close(_f);\n" +
-            "                    exit;\n" +
-            "                }";
-        gml = gml.Insert(breakIdx, insert);
-        group.QueueReplace(selObj, gml);
-        patched++;
+ReplaceFunction("gml_GlobalScript_scr_84_lang_load", @"function scr_84_lang_load()
+{
+    var name = ""lang_ch1_cxkcxkckx_"" + global.lang + "".json"";
+    if (global.lang == ""ja"" && !file_exists(working_directory + ""lang/"" + name) && !file_exists(name)) {
+        name = ""lang_ja.json"";
     }
-}
+    var orig_filename = working_directory + ""lang/"" + name;
+    var new_filename = working_directory + ""lang-new/"" + name;
+    var filename = orig_filename;
+    var type = ""orig"";
+    var orig_map = scr_84_load_map_json(orig_filename);
+    if (ossafe_file_exists(new_filename))
+    {
+        var new_map = scr_84_load_map_json(new_filename);
+        var new_date = real(ds_map_find_value(new_map, ""date""));
+        var orig_date = real(ds_map_find_value(orig_map, ""date""));
+        if (new_date > orig_date)
+        {
+            ds_map_destroy(orig_map);
+            orig_map = new_map;
+            filename = new_filename;
+            type = ""new("" + string(new_date) + "")"";
+        }
+    }
+    ds_map_destroy(global.lang_map);
+    global.lang_map = orig_map;
+    return type;
+}");
 
-foreach (var code in Data.Code) {
-    string gml;
-    try {
-        gml = new Underanalyzer.Decompiler.DecompileContext(ctx, code, Data.ToolInfo.DecompilerSettings).DecompileToString();
-    } catch { continue; }
-    
-    if (gml.Contains("game_end();")) {
-        string newGml = gml.Replace("game_end();", 
-            @"if (true) { var _q = file_text_open_write(""quit.temp""); file_text_close(_q); exit; }");
-        group.QueueReplace(code, newGml);
-        patched++;
-    }
+var menuDraw = Data.Code.FirstOrDefault(c => c.Name.Content == "gml_Object_DEVICE_MENU_Draw_0");
+if (menuDraw != null) {
+    string gml = new Underanalyzer.Decompiler.DecompileContext(ctx, menuDraw, Data.ToolInfo.DecompilerSettings).DecompileToString().Replace("\r\n", "\n");
+    gml = gml.Replace("LANGUAGETEXT = \"日本語\";", "LANGUAGETEXT = \"日本語\";");
+    gml = gml.Replace("draw_set_font(fnt_ja_main);", "draw_set_font(fnt_main);");
+    group.QueueReplace(menuDraw, gml);
+    patched++;
 }
 
 group.Import();

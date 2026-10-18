@@ -16,6 +16,7 @@
 #import <UIKit/UIKit.h>
 #include <unistd.h>
 #include <objc/runtime.h>
+#include <stdlib.h>
 
 static void (*libc_exit)(int);
 static void (*libc__exit)(int);
@@ -152,8 +153,13 @@ static void start_temp_poller(void) {
             }
 
             if (pending) {
-                write_log("[poller] exit");
-                exit(0);
+                write_log("[poller] force restart");
+                is_exiting = 1;
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"dios://"] options:@{} completionHandler:nil];
+                });
+                usleep(300000);
+                _exit(0);
             }
         }
     });

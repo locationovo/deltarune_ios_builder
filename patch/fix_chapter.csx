@@ -77,7 +77,7 @@ if (devMenuObj != null) {
     string gml = new Underanalyzer.Decompiler.DecompileContext(ctx, devMenuObj, Data.ToolInfo.DecompilerSettings).DecompileToString().Replace("\r\n", "\n");
     if (gml.Contains("game_end();")) {
         gml = gml.Replace("game_end();", 
-            @"var _f_quit = file_text_open_write(""quit.temp""); file_text_close(_f_quit);");
+            @"file_text_close(file_text_open_write(""quit.temp""));");
         group.QueueReplace(devMenuObj, gml);
         patched++;
     }

@@ -80,7 +80,7 @@ foreach (var code in Data.Code) {
     
     if (gml.Contains("game_end();")) {
         string newGml = gml.Replace("game_end();", 
-            @"{ if (os_type == os_ios) { var _f_exit = file_text_open_write(""quit.temp""); file_text_close(_f_exit); exit; } else { game_end(); } }");
+            @"{ var _q = file_text_open_write(""quit.temp""); file_text_close(_q); exit; }");
         group.QueueReplace(code, newGml);
         patched++;
     }

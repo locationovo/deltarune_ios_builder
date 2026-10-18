@@ -21,15 +21,17 @@
 #include <spawn.h>
 #include <errno.h>
 #include <string.h>
+#include <stdatomic.h>
+#include <sys/time.h>
 
 extern char **environ;
-
+extern int getTargetChapter(void);
 extern "C" void *SecTaskCreateFromSelf(CFAllocatorRef allocator);
 extern "C" CFTypeRef SecTaskCopyValueForEntitlement(void *task, CFStringRef entitlement, CFErrorRef *error);
 
 static void (*libc_exit)(int);
 static void (*libc__exit)(int);
-static int is_exiting = 0;
+static _Atomic int is_exiting = 0;
 static dispatch_source_t poller_timer = nil;
 
 static void write_log(const char *fmt, ...) {
@@ -39,40 +41,67 @@ static void write_log(const char *fmt, ...) {
         NSString *path = [docs[0] stringByAppendingPathComponent:@"arch.log"];
         FILE *f = fopen([path UTF8String], "a");
         if (!f) return;
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        struct tm tm_buf;
+        localtime_r(&tv.tv_sec, &tm_buf);
         va_list ap; va_start(ap, fmt);
-        vfprintf(f, fmt, ap);
-        va_end(ap); fprintf(f, "\n"); fclose(f);
+        char buf[2048];
+        vsnprintf(buf, sizeof(buf), fmt, ap);
+        va_end(ap);
+        fprintf(f, "[%04d-%02d-%02d %02d:%02d:%02d.%03d] %s\n",
+                tm_buf.tm_year + 1900, tm_buf.tm_mon + 1, tm_buf.tm_mday,
+                tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec,
+                (int)(tv.tv_usec / 1000), buf);
+        fclose(f);
     }
+}
+
+static BOOL hasEntitlementBool(void *task, CFStringRef key) {
+    CFTypeRef v = SecTaskCopyValueForEntitlement(task, key, NULL);
+    if (!v) return NO;
+    BOOL result = NO;
+    if (CFGetTypeID(v) == CFBooleanGetTypeID()) {
+        result = CFBooleanGetValue((CFBooleanRef)v);
+    } else {
+        result = YES;
+    }
+    CFRelease(v);
+    return result;
 }
 
 static BOOL isTrollStoreEnv(void) {
     static BOOL cached = NO;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
+        int plat = -1, nosb = -1, nocon = -1;
         void *task = SecTaskCreateFromSelf(kCFAllocatorDefault);
         if (task) {
-            BOOL hit = NO;
-            CFStringRef keys[] = {
-                CFSTR("platform-application"),
-                CFSTR("com.apple.private.security.no-sandbox"),
-                CFSTR("com.apple.private.security.no-container"),
-            };
-            for (int i = 0; i < 3 && !hit; i++) {
-                CFTypeRef v = SecTaskCopyValueForEntitlement(task, keys[i], NULL);
-                if (v) { hit = YES; CFRelease(v); }
-            }
+            plat = (int)hasEntitlementBool(task, CFSTR("platform-application"));
+            nosb = (int)hasEntitlementBool(task, CFSTR("com.apple.private.security.no-sandbox"));
+            nocon = (int)hasEntitlementBool(task, CFSTR("com.apple.private.security.no-container"));
             CFRelease(task);
-            if (hit) { cached = YES; return; }
         }
-        NSFileManager *fm = [NSFileManager defaultManager];
-        if ([fm fileExistsAtPath:@"/var/mobile/Library/Preferences/com.opa334.TrollStore.plist"]) { cached = YES; return; }
-        if ([fm fileExistsAtPath:@"/var/mobile/Library/Preferences/com.opa334.trollstorepreferences.plist"]) { cached = YES; return; }
-        if ([fm fileExistsAtPath:@"/Applications/TrollStore.app"]) { cached = YES; return; }
-        NSString *bundle = [[NSBundle mainBundle] bundlePath];
-        NSString *parent = [bundle stringByDeletingLastPathComponent];
-        if ([fm fileExistsAtPath:[parent stringByAppendingPathComponent:@".TrollStore"]]) { cached = YES; return; }
-        NSString *grand = [parent stringByDeletingLastPathComponent];
-        if ([fm fileExistsAtPath:[grand stringByAppendingPathComponent:@".TrollStore"]]) { cached = YES; return; }
+        BOOL hit = (plat == 1 || nosb == 1 || nocon == 1);
+        if (!hit) {
+            NSString *bundle = [[NSBundle mainBundle] bundlePath];
+            NSString *parent = [bundle stringByDeletingLastPathComponent];
+            NSString *grand = [parent stringByDeletingLastPathComponent];
+            NSArray *markers = @[
+                @"/var/mobile/Library/Preferences/com.opa334.TrollStore.plist",
+                @"/var/mobile/Library/Preferences/com.opa334.trollstorepreferences.plist",
+                @"/Applications/TrollStore.app",
+                [parent stringByAppendingPathComponent:@".TrollStore"],
+                [grand stringByAppendingPathComponent:@".TrollStore"],
+            ];
+            NSFileManager *fm = [NSFileManager defaultManager];
+            for (NSString *p in markers) {
+                if ([fm fileExistsAtPath:p]) { hit = YES; break; }
+            }
+        }
+        cached = hit;
+        write_log("[env] TrollStore=%d platform=%d nosandbox=%d nocontainer=%d",
+                  (int)hit, plat, nosb, nocon);
     });
     return cached;
 }
@@ -121,7 +150,7 @@ static void handle_pending_switch(void) {
         if ([fm fileExistsAtPath:launcherTemp]) {
             setTargetChapter(0);
             [fm removeItemAtPath:launcherTemp error:nil];
-            write_log("[switch] launcher");
+            write_log("[applyChapterSwitch] launcher");
             return;
         }
 
@@ -137,7 +166,8 @@ static void handle_pending_switch(void) {
                 int n = [numStr intValue];
                 if (n >= 0 && n <= 9) {
                     setTargetChapter(n);
-                    write_log("[switch] target %d", n);
+                    write_log("[applyChapterSwitch] found %s chapter %d", [fileName UTF8String], n);
+                    write_log("[applyChapterSwitch] setTargetChapter(%d)", n);
                     [fm removeItemAtPath:[docsDir stringByAppendingPathComponent:fileName] error:nil];
                     return;
                 }
@@ -146,9 +176,27 @@ static void handle_pending_switch(void) {
     }
 }
 
+static void do_relaunch_or_fallback(const char *tag) {
+    if (isTrollStoreEnv()) {
+        write_log("[%s] TrollStore relaunch", tag);
+        if (relaunch_self()) _exit(0);
+        write_log("[%s] relaunch failed, fallback", tag);
+    } else {
+        write_log("[%s] signed env, openURL fallback", tag);
+    }
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"dios://"] options:@{} completionHandler:^(BOOL success) {
+            write_log("[%s] openURL callback: %d", tag, success);
+        }];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            kill(getpid(), SIGKILL);
+        });
+    });
+}
+
 static void check_pending_before_exit(void) {
-    if (is_exiting) return;
-    is_exiting = 1;
+    if (atomic_exchange(&is_exiting, 1)) return;
 
     @autoreleasepool {
         NSArray *docPaths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
@@ -164,24 +212,13 @@ static void check_pending_before_exit(void) {
         if (!pending && [fm fileExistsAtPath:[docsDir stringByAppendingPathComponent:@"launcher.temp"]]) pending = YES;
         if (!pending && [fm fileExistsAtPath:[docsDir stringByAppendingPathComponent:@"quit.temp"]]) pending = YES;
 
-        if (!pending) return;
-
-        if (isTrollStoreEnv()) {
-            write_log("[exit] TrollStore relaunch");
-            if (relaunch_self()) {
-                _exit(0);
-            }
-            write_log("[exit] relaunch failed, fallback");
-        } else {
-            write_log("[exit] signed env, old behavior");
+        if (!pending) {
+            write_log("[handleExitBefore] pending=0");
+            return;
         }
 
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"dios://"] options:@{} completionHandler:nil];
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                kill(getpid(), SIGKILL);
-            });
-        });
+        write_log("[handleExitBefore] pending=1");
+        do_relaunch_or_fallback("exit");
     }
 }
 
@@ -192,41 +229,27 @@ static void start_temp_poller(void) {
     if (poller_timer) return;
     dispatch_queue_t q = dispatch_get_global_queue(QOS_CLASS_UTILITY, 0);
     poller_timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, q);
-    dispatch_source_set_timer(poller_timer, dispatch_time(DISPATCH_TIME_NOW, 0), 100 * NSEC_PER_MSEC, 10 * NSEC_PER_MSEC);
+    dispatch_source_set_timer(poller_timer, dispatch_time(DISPATCH_TIME_NOW, 0), 50 * NSEC_PER_MSEC, 10 * NSEC_PER_MSEC);
 
     dispatch_source_set_event_handler(poller_timer, ^{
         @autoreleasepool {
-            if (is_exiting) return;
+            if (atomic_load(&is_exiting)) return;
+
             NSArray *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
             if (docs.count == 0) return;
             NSString *docDir = docs[0];
             NSFileManager *fm = [NSFileManager defaultManager];
 
-            BOOL pending = NO;
-            for (int i = 1; i <= 5; i++) {
+            BOOL hasChapter = NO;
+            for (int i = 1; i <= 9; i++) {
                 NSString *t = [docDir stringByAppendingPathComponent:[NSString stringWithFormat:@"select_chapter_%d", i]];
-                if ([fm fileExistsAtPath:t]) { pending = YES; break; }
+                if ([fm fileExistsAtPath:t]) { hasChapter = YES; break; }
             }
-            if (!pending && [fm fileExistsAtPath:[docDir stringByAppendingPathComponent:@"launcher.temp"]]) pending = YES;
-            if (!pending && [fm fileExistsAtPath:[docDir stringByAppendingPathComponent:@"quit.temp"]]) pending = YES;
+            if (!hasChapter) return;
 
-            if (pending) {
-                is_exiting = 1;
-                if (isTrollStoreEnv()) {
-                    write_log("[poller] TrollStore relaunch");
-                    if (relaunch_self()) {
-                        _exit(0);
-                    }
-                    write_log("[poller] relaunch failed, fallback");
-                }
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    write_log("[poller] main thread restart");
-                    [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"dios://"] options:@{} completionHandler:nil];
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        kill(getpid(), SIGKILL);
-                    });
-                });
-            }
+            if (atomic_exchange(&is_exiting, 1)) return;
+            write_log("[poller] chapter file detected, immediate relaunch");
+            do_relaunch_or_fallback("poller");
         }
     });
     dispatch_resume(poller_timer);
@@ -250,12 +273,16 @@ static BOOL handle_open_url(id self, SEL _cmd, UIApplication *app, NSURL *url, N
 }
 
 __attribute__((constructor(104))) static void init_url_scheme(void) {
-    Class cls = NSClassFromString(@"iPad_RunnerAppDelegate");
-    if (!cls) return;
-    SEL sel = @selector(application:openURL:options:);
-    if (!class_getInstanceMethod(cls, sel)) {
-        class_addMethod(cls, sel, (IMP)handle_open_url, "B@:@@@");
-    }
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        Class cls = NSClassFromString(@"iPad_RunnerAppDelegate");
+        if (!cls) return;
+        SEL sel = @selector(application:openURL:options:);
+        if (!class_getInstanceMethod(cls, sel)) {
+            class_addMethod(cls, sel, (IMP)handle_open_url, "B@:@@@");
+            write_log("[URLScheme] openURL:options: added");
+        }
+    });
 }
 
 void minimalfunction() {}

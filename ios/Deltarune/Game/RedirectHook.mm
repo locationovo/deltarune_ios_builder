@@ -47,3 +47,7 @@ __attribute__((constructor(103))) static void installRedirect(void) {
     };
     rebind_symbols(rb, 1);
 }
+
+int getTargetChapter(void) {
+    return g_target_chapter;
+}

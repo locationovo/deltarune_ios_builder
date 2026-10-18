@@ -93,18 +93,23 @@ static void check_pending_before_exit(void) {
             pending = YES;
         }
 
-        if (pending) {
-            write_log("[exit] openURL");
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"dios://"] options:@{} completionHandler:^(BOOL success) {
-                    write_log("[exit] openURL callback: %d", success);
-                    usleep(200000);
-                    libc_exit(0);
-                }];
-            });
-            while (1) {
-                usleep(100000);
-            }
+        if (!pending) {
+            NSString *lt = [docsDir stringByAppendingPathComponent:@"launcher.temp"];
+            FILE *f = fopen([lt UTF8String], "w");
+            if (f) fclose(f);
+            write_log("[exit] forced launcher.temp");
+        }
+
+        write_log("[exit] openURL");
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"dios://"] options:@{} completionHandler:^(BOOL success) {
+                write_log("[exit] openURL callback: %d", success);
+                usleep(200000);
+                libc_exit(0);
+            }];
+        });
+        while (1) {
+            usleep(100000);
         }
     }
 }
